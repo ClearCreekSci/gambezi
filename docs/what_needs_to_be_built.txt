@@ -1,0 +1,25 @@
+We want a single installer that consists of one or more of the following apps:
+    * data logger
+    * data server
+
+In addition, the data logger app may have one or more associated sensors:
+    * bme280
+    * dlfoto
+    * etc.
+
+The builder needs to create settings.cfg files for the logger and the server, if applicable
+
+The builder needs to get all of the necessary files together in a staging directory
+
+The builder needs to zip all the things together into a bundle
+
+The builder could also scp the bundle and the installer to the target platform, if that is desireable
+
+There needs to be an installer that can unzip the bundle and do the following:
+    * create destination directories
+    * copy files to the destination directories
+    * set up python environments as needed
+    * set up systemd files to start apps at boot 
+
+We might just include the old installers as part of the bundle and call them appropriately
+

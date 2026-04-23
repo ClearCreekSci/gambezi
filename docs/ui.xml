@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ccs-ui>
+    <!-- basic types -->
+    <!-- byte -->
+    <!-- char -->
+    <!-- int -->
+    <!-- float -->
+    <!-- string -->
+    <!-- list: list of similar objects -->
+    <!-- struct: struct of not necessarily similar "values" -->
+    <types>
+       <struct>
+           <ns>top</ns>
+           <name>paths</name>
+	   <desc>Important file paths</desc>
+	   <member>
+               <name>log</name>
+	       <type>string</type>
+	       <desc>Location on disk of log files</desc>
+           </member>
+	   <member>
+               <name>csv</name>
+	       <type>string</type>
+               <desc>Location on disk of .csv files</desc>
+	       <default>/opt/ccs/DataLogger/csv</default>
+	   </member>
+	   <member>
+               <name>photos</name>
+	       <type>string</type>
+               <desc>Location on disk of photo files</desc>
+	       <default>/opt/ccs/DataLogger/photos</default>
+	   </member>
+	   <member>
+               <name>videos</name>
+	       <type>string</type>
+               <desc>Location on disk of video files</desc>
+	       <default>/opt/ccs/DataLogger/videos</default>
+	   </member>
+       </struct>
+    </types>
+    <ui>
+    </ui>
+</ccs-ui>
