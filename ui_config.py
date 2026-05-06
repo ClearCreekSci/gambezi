@@ -47,6 +47,8 @@ TYPE_INT           = 'int'
 TYPE_FLOAT         = 'float'
 TYPE_STRING        = 'string'
 
+BASE_TYPES         = [TYPE_BYTE,TYPE_CHAR,TYPE_INT,TYPE_FLOAT,TYPE_STRING]
+
 # Complex Types 
 TYPE_STRUCT        = 'struct'
 TYPE_LIST          = 'list'
@@ -104,7 +106,7 @@ class UiStruct(UiType):
         super().__init__()
         self.members = dict()
         self.type = TYPE_STRUCT 
-        self.super_nodes = list()
+        self.super_types = list()
 
     def clone(self):
         rv = UiStruct()
@@ -112,6 +114,8 @@ class UiStruct(UiType):
         rv.desc = self.desc
         for key in self.members.keys():
             rv.members[key] = self.members[key].clone()
+        for st in self.super_types:
+            rv.super_types.append(st)
         return rv
 
     def __repr__(self):
@@ -120,6 +124,10 @@ class UiStruct(UiType):
             s += '\tmembers:\n'
             for key in self.members.keys():
                 s += '\t\t' + str(self.members[key]) + '\n'
+            s += '\tsuper types:\n'
+            if (None is not self.super_types) and (len(self.super_types) > 0):
+                for name in self.super_types:
+                    s += '\t\t' + str(name) + '\n'
         return s
 
 class UiList(UiType):
@@ -181,9 +189,12 @@ class UiObject(object):
 class UiConfig(object):
 
     def __init__(self):
-        self.name = None
+        # key is type name
+        # value is a UiType object
         self.types = dict()
-        self.objects = list()
+        # key is metabase name
+        # value is a dictionary of {object name,UiObject}
+        self.components = dict()
 
     def parse_types(self,path):
         print('Parsing types from: ' + path)
@@ -200,29 +211,25 @@ class UiConfig(object):
                     self.parse_list_node(list_node)
             else:
                 raise InvalidCcsUiFile('Types element not found')
-
-
         else:
             raise InvalidCcsUiFile('Not a valid CCS UI file')
 
-    def parse_ui(self,path,top):
+    def parse_ui(self,path,name):
         print('Parsing ui from: ' + path)
         tree = et.parse(path)
         root = tree.getroot()
         if root.tag == TAG_CCS_UI:
             ui_node = root.find(TAG_UI)
+            self.components[name] = dict()
             if None is not ui_node:
                 object_nodes = ui_node.findall(TAG_OBJECT)
                 for object_node in object_nodes:
-                    obj = self.parse_object_node(object_node)
-                    t = None
-                    if None is top:
-                        t = self.find_type(obj.type)
-                    else:
-                        t = top.find_type(obj.type)
+                    obj = self.parse_object_node(object_node,name)
+                    t = self.find_type(obj.type)
                     if None is not t:
                         if TYPE_LIST == t.type:
                             obj.values['subtype'] = t.subtype
+                    self.components[name][obj.name] = obj
             else:
                 raise InvalidCcsUiFile('ui element not found')
         else:
@@ -252,12 +259,15 @@ class UiConfig(object):
             self.parse_member_node(new_struct,member_node)
         inheritance_node = node.find(TAG_INHERITANCE)
         if None is not inheritance_node:
-            super_nodes = inheritance_node.findall(TAG_SUPER)
-            if None is not super_nodes:
-                for nd in super_nodes:
-                    new_struct.super_nodes.append(nd.text.strip())
+            super_types = inheritance_node.findall(TAG_SUPER)
+            if None is not super_types:
+                for nd in super_types:
+                    print('[parse_struct_node] appending super type: ' + str(nd.text.strip()))
+                    new_struct.super_types.append(nd.text.strip())
         # FIXME: Do error checking, including name collisions
         self.types[new_struct.name] = new_struct
+
+        #print('[parse_struct_node] new_struct: ' + str(new_struct))
 
     def parse_member_node(self,struct,node):
         new_member = UiMember()
@@ -283,20 +293,13 @@ class UiConfig(object):
         rv = UiConfig()
         for key in self.types.keys():
             rv.types[key] = self.types[key].clone()
-        for o in self.objects:
-            rv.objects.append(o.clone)
+        for comp_name in self.components.keys():
+            comp = self.components[comp_name]
+            for obj_name in comp[comp_name].keys():
+                rv.components[comp_name][obj_name] = dict()
+                obj = self.components[comp_name][obj_name].clone() 
+                rv.components[comp_name][obj_name] = obj
         return rv
-
-    def cascade_types(self,child):
-        rv = self.clone()
-        if None is not child and isinstance(child,UiConfig):
-            for key in child.types.keys():
-                # FIXME: name collisions?
-                rv.types[key] = child.types[key].clone()
-            # We only want the types...
-            #for o in child.objects:
-            #    rv.objects.append(o)
-        return rv 
 
     def parse_list_node(self,node):
         new_list = UiList()
@@ -323,14 +326,18 @@ class UiConfig(object):
         # FIXME: Do error checking, including name collisions
         self.types[new_list.name] = new_list
 
-    def parse_object_node(self,node):
+    def parse_object_node(self,node,name):
         new_object = UiObject()
         type_node = node.find(TAG_TYPE)
         if None is not type_node:
             new_object.type = type_node.text.strip()
         else:
             raise InvalidUiConfigElement('object element has no type')
-        self.objects.append(new_object)
+        name_node = node.find(TAG_NAME)
+        if None is not name_node:
+            new_object.name = name_node.text.strip()
+        else:
+            raise InvalidUiConfigElement('object element has no name')
         return new_object
 
     def find_type(self,name):
@@ -347,7 +354,7 @@ class UiConfig(object):
         for key in self.types.keys():
             if key == name:
                 target = self.types[key]
-                for nd in target.super_nodes:
+                for nd in target.super_types:
                     rv.append(nd)
                 break
         return rv
@@ -370,10 +377,11 @@ class UiConfig(object):
             for v in self.types:
                 s += str(self.types[v]) 
             s += '\n'
-        if None is not self.objects:
-            s += '***** Objects *****\n'
-            for v in self.objects:
-                s += str(v) 
+        if None is not self.components:
+            for c in self.components:
+                s += c + '\n'
+                for o in self.components[c]:
+                    s += str(self.components[c][o]) 
             s += '\n'
         return s
 

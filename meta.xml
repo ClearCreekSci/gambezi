@@ -1,25 +1,21 @@
 <gambezi>
     <paths>
 	<!-- <staging>./staging</staging> but we will have to fix the path separator /mnt/c/Users/winsl/tmp/ccs_foo//docs/ui.xml-->
-        <!-- <staging>~/tmp/staging/</staging> -->
-	<staging>/mnt/c/Users/winsl/tmp/ccs_foo/staging</staging>
+        <staging>/tmp/ccs_staging/</staging>
     </paths>
     <apps>
 	<app name="logger">
-	    <!-- <url>https://github.com/ClearCreekSci/ccs_data_logger/archive/refs/heads/main.zip</url> -->
-	    <url>file:///mnt/c/Users/winsl/tmp/ccs_foo/datalogger_main.zip</url>
+	    <url>https://github.com/ClearCreekSci/ccs_data_logger/archive/refs/heads/main.zip</url>
             <desc>Collect and store data from sensors</desc>
         </app>
         <app name="server">
-            <!-- <url>https://github.com/ClearCreekSci/ccs_dl_browser/archive/refs/heads/main.zip</url> -->
-	    <url>file:///mnt/c/Users/winsl/tmp/ccs_foo/dl_browser_main.zip</url>
+            <url>https://github.com/ClearCreekSci/ccs_dl_browser/archive/refs/heads/main.zip</url>
             <desc>Display collected data in a web browser</desc> 
         </app>
     </apps>
     <modules>
         <module name="bme280">
-	    <!-- <url>https://github.com/ClearCreekSci/bme280_ccs_sensor/blob/main/bme280.py</url> -->
-	    <url>file:///mnt/c/Users/winsl/tmp/ccs_foo/bme280/bme280.py</url>
+		<url>https://github.com/ClearCreekSci/bme280_ccs_sensor/archive/refs/heads/main.zip</url>
 	    <desc>Measure air temperature, barometric pressure and humidity</desc>
 	    <!-- The following values are overloaded. The "loader" tag indicates which app will load -->
 	    <!-- the module, as well as being the namespace for UI types (such as logger:sensor) -->

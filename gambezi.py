@@ -22,6 +22,7 @@
 import os
 import cmd
 import sys
+import shutil
 import traceback
 
 import metadata
@@ -70,8 +71,7 @@ class CcsBuildInstaller(cmd.Cmd):
 
     def __init__(self):
         super().__init__()
-        self.ui_types = None
-        self.ui = dict()
+        self.ui = ui_config.UiConfig() 
 
     def check_build(self):
         print('FIXME: Check to see if the build makes sense.')
@@ -99,25 +99,25 @@ class CcsBuildInstaller(cmd.Cmd):
         print('FIXME: remove')
         return False
 
+    def do_reset(self,arg):
+        'Reset the configuration context (clear cache etc.)'
+        if True == os.path.exists(self.meta.staging):
+            print('Deleting cache directory: ' + self.meta.staging)
+            shutil.rmtree(self.meta.staging)
+            os.makedirs(self.meta.staging,exist_ok=True)
+        return False
+
     def parse_ui(self,metabase):
         dst = os.path.join(metabase.download_path,DOCS_DIR)
         dst = os.path.join(dst,UI_FILE)
-        ui_types = ui_config.UiConfig()
-        ui_types.parse_types(dst)
-        cfg = self.ui_types.clone()
-        self.ui_types = cfg.cascade_types(ui_types)
-        print(str(self.ui_types))
-        ui = ui_config.UiConfig()
-        ui.parse_ui(dst,self.ui_types)
-        ui.name = metabase.name
-        self.ui[ui.name] = ui
-        print(str(self.ui[ui.name]))
+        self.ui.parse_types(dst)
+        self.ui.parse_ui(dst,metabase.name)
+        self.fixup_structs()
 
     def parse_local_ui(self):
         dst = os.path.join('.',DOCS_DIR)
         dst = os.path.join(dst,UI_FILE)
-        self.ui_types = ui_config.UiConfig()
-        self.ui_types.parse_types(dst)
+        self.ui.parse_types(dst)
 
     def do_configure(self,arg):
         'Configure a component in the installation: i.e. configure logger'
@@ -125,7 +125,7 @@ class CcsBuildInstaller(cmd.Cmd):
         for app in self.meta.apps:
             if app.name == arg:
                 found = True
-                if self.download_app(app):
+                if self.download_component(app):
                     self.parse_ui(app)
                     self.configure_app(app)
                 else:
@@ -135,7 +135,7 @@ class CcsBuildInstaller(cmd.Cmd):
         #    for module in self.meta.modules:
         #        if module.name == arg:
         #            found = True
-        #            if self.download_module(module):
+        #            if self.download_component(module):
         #                self.parse_ui(module)
         #                self.configure_uiconfig(module)
         #            else:
@@ -193,16 +193,18 @@ class CcsBuildInstaller(cmd.Cmd):
         except Exception as e:
             print('[parse_metadata] Error parsing metadata: ' + str(e))
 
-    def download_app(self,app):
-        if False == app.cached:
-            dst = os.path.join(self.meta.staging,app.name)
-            os.makedirs(os.path.expanduser(dst),exist_ok=True)
-            rv = utils.download_file(app.url,os.path.expanduser(dst),True)
-            if rv:
-                app.download_path = dst
-                app.cached = True
+    def download_component(self,v):
+        dst = os.path.expanduser(os.path.join(self.meta.staging,v.name))
+        self.check_file_cache(v,dst)
+        if False == v.cached:
+            os.makedirs(dst,exist_ok=True)
+            dst = utils.download_file(v.url,dst,True)
+            if dst is not None:
+                v.download_path = dst
+                v.cached = True
         else:
-            print('Skipping app download, using cached files')
+            v.download_path = utils.find_download_dir(dst)
+            print('Skipping download, using cached files in ' + str(v.download_path))
         return True
 
     def configure_member(self,obj,mtype,key):
@@ -231,11 +233,13 @@ class CcsBuildInstaller(cmd.Cmd):
                 raise GambeziConfigureError(s)
 
     def configure_struct(self,obj,otype):
-        #stypes = self.ui_cfg.find_super_types(obj.type)
         for key in otype.members.keys():
             mtype = otype.members[key]
-            self.configure_member(obj,mtype,key)
-        print('[configure_struct] exit')
+            if mtype.type in ui_config.BASE_TYPES:
+                self.configure_member(obj,mtype,key)
+            else:
+                stype = self.ui.find_type(mtype.type)
+                self.configure_struct(obj,stype)
 
 
     def configure_list(self,obj,otype):
@@ -243,13 +247,13 @@ class CcsBuildInstaller(cmd.Cmd):
             raise GambeziInvalidObject('Expected UiList, got ' + str(type(otype)))
         if False == KEY_OBJECTS in obj.values.keys():
             raise GambeziInvalidObject("Didn't find 'values' key in UiList")
-        mtype = self.ui_cfg.find_type(otype.subtype)
+        mtype = self.ui.find_type(otype.subtype)
         if None is mtype:
             raise GambeziInvalidObject("Didn't find subtype: " + otype.subtype)
         items = obj.values[KEY_OBJECTS]
         for item in items:
             current_obj = obj.values[item]
-            current_obj_type = self.ui_cfg.find_type(current_obj.type)
+            current_obj_type = self.ui.find_type(current_obj.type)
             if ui_config.TYPE_STRUCT == current_obj_type.type:
                 self.configure_struct(current_obj,current_obj_type)
             else:
@@ -257,45 +261,40 @@ class CcsBuildInstaller(cmd.Cmd):
                 print('[configure_list] current_obj_type: ' + str(current_obj_type))
 
     def configure_app(self,app):
-        if app.name in self.ui.keys():
-            ui = self.ui[app.name]
-            for obj in ui.objects:
-                otype = self.ui_types.find_type(obj.type)
+        if app.name in self.ui.components.keys():
+            for key in self.ui.components[app.name]:
+                obj = self.ui.components[app.name][key]
+                otype = self.ui.find_type(obj.type)
                 if isinstance(otype,ui_config.UiStruct):
                     self.configure_struct(obj,otype)
                 elif isinstance(otype,ui_config.UiList):
                     self.build_list(obj)
-                    print('[configure_app] built list: ' + str(obj))
                     self.configure_list(obj,otype)
         else:
             raise GambeziConfigureError("Couldn't find UI configuration for " + app.name)
 
-    def download_module(self,mod):
-        if False == mod.cached:
-            dst = os.path.join(self.meta.staging,mod.name)
-            os.makedirs(os.path.expanduser(dst),exist_ok=True)
-            rv = utils.download_file(mod.url,os.path.expanduser(dst),True)
-            if rv:
-                mod.download_path = dst
-                basename = os.path.basename(mod.url)
-                if basename.endswith('.py'):
-                    new_url = mod.url[:-len(basename)]
-                    # We don't use os.path.join here in case we are on windows
-                    new_url = new_url + DOCS_DIR + '/' + UI_FILE
-                    dst = os.path.join(dst,DOCS_DIR)
-                    rv = utils.download_file(new_url,os.path.expanduser(dst),True)
-                    if rv:
-                        mod.cached = True
-        else:
-            print('Skipping module download, using cached files')
-        return True
+    def fixup_structs(self):
+        print('[fixup_structs]')
+        full_types = dict()
+        for key in self.ui.types.keys():
+            otype = self.ui.types[key]
+            print('[fixup_structs] looking at ' + otype.name)
+            if isinstance(otype,ui_config.UiStruct):
+                print('[fixup_structs] fixing up ' + otype.name)
+                x = self.build_full_type(otype)
+                full_types[otype.name] = x
+            else:
+                print('[fixup_structs] appending ' + otype.name)
+                full_types[otype.name] = otype
+        self.ui.types = full_types
 
     def write_app_settings(self,app,path):
         print('Writing settings.cfg for ' + str(app.name) + ' (' + path + ')')
         with open(path,'wt') as fd:
             fd.write(XML_PREFIX + '\n')
             fd.write('<' + TAG_CONFIG_ROOT + ' ' + ATTRIB_VERSION + CONFIG_VERSION + '>\n')
-            for obj in self.ui[app.name].objects:
+            for key in self.ui.components[app.name].keys():
+                obj = self.ui.components[app.name][key]
                 otype = app.ui_types.find_type(obj.type)
                 if isinstance(otype,ui_config.UiStruct):
                     name = app.ui_types.get_name(obj.type)
@@ -324,22 +323,20 @@ class CcsBuildInstaller(cmd.Cmd):
             if app.name == name:
                 rv = app
                 if False == app.cached:
-                    if False == self.download_app(app):
+                    if False == self.download_component(app):
                         raise GambeziDownloadError('[2] Error downloading ' + str(app.name) + ': ' + str(e))
-                    if None is app.ui_types:
-                        self.parse_ui(app)
         return rv
 
     def build_list(self,obj):
         typelist = list()
-        otype = self.ui_cfg.find_type(obj.type)
+        otype = self.ui.find_type(obj.type)
         # In the future, we may have other list items besides module names
         for module in self.meta.modules:
             search = module.loader + ':' + module.prefix
             if search == otype.subtype:
                 typelist.append(module.name + ':' + module.prefix)
             else:
-                super_types = ui_cfg.find_super_types(obj.type)
+                super_types = self.ui.find_super_types(obj.type)
                 for t in super_types:
                     if search == t.subtype:
                         typelist.append(module.name)
@@ -369,7 +366,7 @@ class CcsBuildInstaller(cmd.Cmd):
                 for module in self.meta.modules:
                     if module.name == basename:
                         found = True
-                        if self.download_module(module):
+                        if self.download_component(module):
                             self.parse_ui(module)
                             break;
                         else:
@@ -390,15 +387,25 @@ class CcsBuildInstaller(cmd.Cmd):
             obj.values[o].type = t
 
     def build_full_type(self,otype):
+        rv = None
         if isinstance(otype,ui_config.UiStruct):
-            rv = otype.clone() 
-            if len(rv.super_types) > 0:
-                for t in rv.super_types:
+            rv = otype.clone()
+            print('[build_full_type] otype: ' + str(otype))
+            if len(otype.super_types) > 0:
+                for super_name in otype.super_types:
+                    t = self.ui.find_type(super_name)
                     for key in t.members.keys():
-                        rv.members[key] = self.members[key].clone()             
+                        rv.members[key] = t.members[key].clone()             
+            else:
+                print('No super types')
         else:
-            raise GambeziInvalidObject('Error trying to build full type for: ' + otype)
+            raise GambeziInvalidObject('Error trying to build full type for: ' + str(otype))
         return rv
+
+    def check_file_cache(self,v,dst):
+        if False == v.cached:
+            if os.path.exists(dst):
+                v.cached = True
 
 if '__main__' == __name__:
     print(intro)

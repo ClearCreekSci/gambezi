@@ -26,9 +26,9 @@ import zipfile
 
 HTTP_PREFIX       = 'http'
 LOCAL_FILE_PREFIX = 'file://'
+DOCS_DIR          = 'docs'
 
 
-# FIXME: I wrote this without any internet access. See if the zipfile package has a function to do this
 def is_zipfile(path:str) -> bool:
     rv = False
     with open(path,'rb') as fd:
@@ -37,8 +37,9 @@ def is_zipfile(path:str) -> bool:
             rv = True
     return rv
 
+# Returns the path to the directory with the files
 def download_http(src:str,dst:str,verbose:bool=False) -> int:
-    rv = False
+    rv = None
     try:
         r = requests.get(src)
         if r.status_code < 400:
@@ -58,17 +59,19 @@ def download_http(src:str,dst:str,verbose:bool=False) -> int:
                 if bytes_written == len(r.content):
                     print('Extracting: ' + str(dst))
                     with zipfile.ZipFile(dst) as zf:
-                        zf.extractall(dstdir)
-            elif r.headers['content-type'].startswith('text/html'):
-                with open(dst,'wb') as fd:
-                    fd.write(r.content)
-            rv = True
+                        info_list = zf.infolist()
+                        root = info_list[0].filename
+                        if root.endswith('/'):
+                            zf.extractall(dstdir)
+                            root = root[:-1]
+                            rv = os.path.join(dstdir,root)
     except Exception as e:
         print('Error retrieving file over HTTP: ' + str(e))
     return rv
 
+# Returns the path to the directory with the files
 def download_local_file(src:str,dst:str,verbose:bool=False) -> int:
-    rv = False 
+    rv = None 
     buf = b''
     with open(src,'rb') as fd:
         buf = fd.read()
@@ -82,11 +85,15 @@ def download_local_file(src:str,dst:str,verbose:bool=False) -> int:
             if is_zipfile(dst):
                 print('Extracting: ' + str(dst))
                 with zipfile.ZipFile(dst) as zf:
-                    zf.extractall(dstdir)
-            rv = True 
+                    info_list = zf.infolist()
+                    root = info_list[0].filename
+                    if root.endswith('/'):
+                        zf.extractall(dstdir)
+                        root = root[:-1]
+                        rv = os.path.join(dstdir,root)
     return rv
 
-# Returns True if downloaded successfully, otherwise False
+# Returns the path to the directory with the files
 def download_file(src:str,dst:str,verbose:bool=False) -> int:
     if verbose:
         print('Downloading: ' + str(src) + ' to ' + str(dst))
@@ -95,4 +102,19 @@ def download_file(src:str,dst:str,verbose:bool=False) -> int:
     elif src.startswith(LOCAL_FILE_PREFIX):
         return download_local_file(src[len(LOCAL_FILE_PREFIX):],dst,verbose)
 
+
+# Returns the path to the directory with the files (used to get directory without doing a download)
+def find_download_dir(start:str) -> str:
+    rv = None
+    if os.path.isdir(start):
+        files = os.listdir(start)
+        if DOCS_DIR in files:
+            rv = start 
+        else:
+            for f in files:
+                if os.path.isdir(os.path.join(start,f)):
+                    rv = find_download_dir(os.path.join(start,f))
+    else:
+        print('[find_download_dir] start is not a directory (' + start + ')')
+    return rv
 
