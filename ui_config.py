@@ -25,7 +25,7 @@ class InvalidUiConfigElement(Exception):
 import xml.etree.ElementTree as et
 
 TAG_CCS_UI         = 'ccs-ui'
-TAG_DEFAULT        = 'default'
+TAG_DEFAULTS       = 'defaults'
 TAG_DESC           = 'desc'
 TAG_INHERITANCE    = 'inheritance'
 TAG_LIST           = 'list'
@@ -62,14 +62,12 @@ class UiMember(object):
         self.name = None
         self.type = None
         self.desc = None
-        self.default = None
 
     def clone(self):
         rv = UiMember()
         rv.name = self.name
         rv.type = self.type
         rv.desc = self.desc
-        rv.default = self.default
         return rv
 
     def __repr__(self):
@@ -80,8 +78,6 @@ class UiMember(object):
             s += '\ttype: ' + str(self.type) + '\n'
         if hasattr(self,'desc') and None is not self.desc:
             s += '\tdesc: ' + str(self.desc) + '\n'
-        if hasattr(self,'default') and None is not self.default:
-            s += '\tdefault: ' + str(self.default) + '\n'
         return s
 
 class UiType(object):
@@ -171,12 +167,15 @@ class UiObject(object):
         # string as listed in the second value as the key, with the value
         # being a UiObject containing the actual data for the named object.
         self.values = dict()
+        self.defaults = dict()
 
     def clone(self):
         rv = UiObject()
         rv.type = self.type
         for key in self.values.keys():
             rv.values[key] = self.values[key]
+        for key in self.defaults.keys():
+            rv.defaults[key] = self.defaults[key]
         return rv
 
     def __repr__(self):
@@ -184,6 +183,7 @@ class UiObject(object):
         if None is not self.type:
             s += '\ttype: ' + str(self.type) + '\n'
             s += '\tvalues: ' + str(self.values) + '\n'
+            s += '\tdefaults: ' + str(self.defaults) + '\n'
         return s
 
 class UiConfig(object):
@@ -197,7 +197,6 @@ class UiConfig(object):
         self.components = dict()
 
     def parse_types(self,path):
-        print('Parsing types from: ' + path)
         tree = et.parse(path)
         root = tree.getroot()
         if root.tag == TAG_CCS_UI:
@@ -215,7 +214,6 @@ class UiConfig(object):
             raise InvalidCcsUiFile('Not a valid CCS UI file')
 
     def parse_ui(self,path,name):
-        print('Parsing ui from: ' + path)
         tree = et.parse(path)
         root = tree.getroot()
         if root.tag == TAG_CCS_UI:
@@ -230,6 +228,7 @@ class UiConfig(object):
                         if TYPE_LIST == t.type:
                             obj.values['subtype'] = t.subtype
                     self.components[name][obj.name] = obj
+                    print('[parse_ui] obj: ' + str(obj))
             else:
                 raise InvalidCcsUiFile('ui element not found')
         else:
@@ -262,7 +261,6 @@ class UiConfig(object):
             super_types = inheritance_node.findall(TAG_SUPER)
             if None is not super_types:
                 for nd in super_types:
-                    print('[parse_struct_node] appending super type: ' + str(nd.text.strip()))
                     new_struct.super_types.append(nd.text.strip())
         # FIXME: Do error checking, including name collisions
         self.types[new_struct.name] = new_struct
@@ -284,9 +282,6 @@ class UiConfig(object):
             new_member.type = type_node.text.strip()
         else:
             raise InvalidUiConfigElement('member element has no type')
-        def_node = node.find(TAG_DEFAULT)
-        if None is not def_node:
-            new_member.default = def_node.text.strip()
         struct.members[new_member.name] = new_member
 
     def clone(self):
@@ -338,6 +333,12 @@ class UiConfig(object):
             new_object.name = name_node.text.strip()
         else:
             raise InvalidUiConfigElement('object element has no name')
+        defaults_node = node.find(TAG_DEFAULTS)
+        if None is not defaults_node:
+            for def_node in defaults_node:
+                print('[parse_object_node] default: ' + def_node.tag)
+                key = def_node.tag
+                new_object.defaults[key] = def_node.text.strip()
         return new_object
 
     def find_type(self,name):

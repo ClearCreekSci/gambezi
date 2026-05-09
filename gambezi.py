@@ -211,7 +211,9 @@ class CcsBuildInstaller(cmd.Cmd):
             done = False
             try:
                 while False == done:
-                    default = str(mtype.default)
+                    default = ''
+                    if key in obj.defaults:
+                        default = obj.defaults[key] 
                     if (key in obj.values):
                         default = obj.values[key]
                     print('Enter value for ' + mtype.name + ' (' + default + '): ') 
@@ -268,23 +270,20 @@ class CcsBuildInstaller(cmd.Cmd):
                 if isinstance(otype,ui_config.UiStruct):
                     self.configure_struct(obj,otype)
                 elif isinstance(otype,ui_config.UiList):
-                    self.build_list(obj)
-                    self.configure_list(obj,otype)
+                    #self.build_list(obj)
+                    #self.configure_list(obj,otype)
+                    self.build_and_configure_list(obj)
         else:
             raise GambeziConfigureError("Couldn't find UI configuration for " + app.name)
 
     def fixup_structs(self):
-        print('[fixup_structs]')
         full_types = dict()
         for key in self.ui.types.keys():
             otype = self.ui.types[key]
-            print('[fixup_structs] looking at ' + otype.name)
             if isinstance(otype,ui_config.UiStruct):
-                print('[fixup_structs] fixing up ' + otype.name)
                 x = self.build_full_type(otype)
                 full_types[otype.name] = x
             else:
-                print('[fixup_structs] appending ' + otype.name)
                 full_types[otype.name] = otype
         self.ui.types = full_types
 
@@ -327,6 +326,63 @@ class CcsBuildInstaller(cmd.Cmd):
                         raise GambeziDownloadError('[2] Error downloading ' + str(app.name) + ': ' + str(e))
         return rv
 
+    def build_and_configure_list(self,obj):
+        typelist = list()
+        otype = self.ui.find_type(obj.type)
+        # In the future, we may have other list items besides module names
+        for module in self.meta.modules:
+            search = module.loader + ':' + module.prefix
+            if search == otype.subtype:
+                typelist.append(module.name + ':' + module.prefix)
+            else:
+                super_types = self.ui.find_super_types(obj.type)
+                for t in super_types:
+                    if search == t.subtype:
+                        typelist.append(module.name)
+        done = False
+        objlist = list()
+        while False == done:
+            for mod in typelist:
+                print(mod)
+            x = input('Add a module (y/n)? ')
+            if x in AFFIRMATIVE:
+                ok = False
+                while ok == False:
+                    mname = input('Please enter name: ')
+                    if mname in typelist:
+                        ok = True
+                    else:
+                        print(mname + ' is not a valid type. Please enter one of the following:')
+                        for mod in typelist:
+                            print(mod)
+                mid = input('Please enter an ID for ' + mod + ': ')
+                objlist.append(mname + '/' + mid)
+                found = False
+                basename = mod
+                if ':' in basename:
+                    parts = basename.split(':')
+                    basename = parts[0]
+                for module in self.meta.modules:
+                    if module.name == basename:
+                        found = True
+                        if self.download_component(module):
+                            self.parse_ui(module)
+                            break;
+                        else:
+                            raise GambeziDownloadError('Error downloading ' + str(module.name))
+                if False == found:
+                    raise UnknownMetaObject("Couldn't find meta object named " + mod)
+            else:
+                done = True
+        obj.values[KEY_SUBTYPE] = otype.subtype
+        obj.values[KEY_OBJECTS] = objlist
+        for o in objlist:
+            obj.values[o] = ui_config.UiObject()
+            # FIXME: We need to make this operation generic
+            parts = o.split('/')
+            t = o
+            if 2 == len(parts):
+                t = parts[0]
     def build_list(self,obj):
         typelist = list()
         otype = self.ui.find_type(obj.type)
@@ -390,14 +446,11 @@ class CcsBuildInstaller(cmd.Cmd):
         rv = None
         if isinstance(otype,ui_config.UiStruct):
             rv = otype.clone()
-            print('[build_full_type] otype: ' + str(otype))
             if len(otype.super_types) > 0:
                 for super_name in otype.super_types:
                     t = self.ui.find_type(super_name)
                     for key in t.members.keys():
                         rv.members[key] = t.members[key].clone()             
-            else:
-                print('No super types')
         else:
             raise GambeziInvalidObject('Error trying to build full type for: ' + str(otype))
         return rv

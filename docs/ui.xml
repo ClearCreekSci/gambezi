@@ -22,19 +22,16 @@
                <name>csv</name>
 	       <type>string</type>
                <desc>Location on disk of .csv files</desc>
-	       <default>/opt/ccs/DataLogger/csv</default>
 	   </member>
 	   <member>
                <name>photos</name>
 	       <type>string</type>
                <desc>Location on disk of photo files</desc>
-	       <default>/opt/ccs/DataLogger/photos</default>
 	   </member>
 	   <member>
                <name>videos</name>
 	       <type>string</type>
                <desc>Location on disk of video files</desc>
-	       <default>/opt/ccs/DataLogger/videos</default>
 	   </member>
        </struct>
     </types>
