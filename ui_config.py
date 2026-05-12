@@ -24,6 +24,7 @@ class InvalidUiConfigElement(Exception):
 
 import xml.etree.ElementTree as et
 
+TAG_ABSTRACT       = 'abstract'
 TAG_CCS_UI         = 'ccs-ui'
 TAG_DEFAULTS       = 'defaults'
 TAG_DESC           = 'desc'
@@ -52,6 +53,8 @@ BASE_TYPES         = [TYPE_BYTE,TYPE_CHAR,TYPE_INT,TYPE_FLOAT,TYPE_STRING]
 # Complex Types 
 TYPE_STRUCT        = 'struct'
 TYPE_LIST          = 'list'
+
+AFFIRMATIVE       = ['y','Y','yes','Yes','YES','t','true','True','TRUE']
 
 class InvalidCcsUiFile(Exception):
     pass
@@ -90,8 +93,6 @@ class UiType(object):
         s = ''
         if hasattr(self,'name') and None is not self.name:
             s += '\tname: ' + str(self.name) + '\n'
-        if hasattr(self,'type') and None is not self.type:
-            s += '\ttype: ' + str(self.type) + '\n'
         if hasattr(self,'desc') and None is not self.desc:
             s += '\tdesc: ' + str(self.desc) + '\n'
         return s
@@ -103,10 +104,12 @@ class UiStruct(UiType):
         self.members = dict()
         self.type = TYPE_STRUCT 
         self.super_types = list()
+        self.abstract = False
 
     def clone(self):
         rv = UiStruct()
         rv.name = self.name
+        rv.abstract = self.abstract
         rv.desc = self.desc
         for key in self.members.keys():
             rv.members[key] = self.members[key].clone()
@@ -116,6 +119,8 @@ class UiStruct(UiType):
 
     def __repr__(self):
         s = super().__repr__()
+        if hasattr(self,'abstract') and None is not self.abstract:
+            s += '\tabstract: ' + str(self.abstract) + '\n'
         if None is not self.members:
             s += '\tmembers:\n'
             for key in self.members.keys():
@@ -149,29 +154,38 @@ class UiList(UiType):
 class UiObject(object):
     def __init__(self):
         self.type = None
+        self.name = None
         # For basic types, the first value in the values dictionary
         # contains the value of the object. The key is 'value'
 
-        # For a struct, the dictionary contains the values of the 
+        # For a struct, the values dictionary contains the values of the 
         # members
 
-        # For a list, the first value in the values dictionary
-        # contains the list subtype. The key is 'subtype', the value
-        # is the name of the type. 
-        # The second value in the dictionary contains a list with the 
-        # specific type (could be a subtype of the 'subtype') and name 
-        # of each object in the list. For this list, the type name and
-        # identifier are separated by a forward slash: '/'. The key is 
-        # 'objects'.
-        # Subsequent values in the list have the type name and identifier
-        # string as listed in the second value as the key, with the value
+        # For a list, the values dictionary contains an item with the
+        # key 'subtype' and the value being the name of the type.  
+        # Note that objects in the list may be subtypes of the 'subtype'.
+        # Subsequent values in the list have a type name and identifier
+        # string separated by a forward slash ('/') as the key, with the value
         # being a UiObject containing the actual data for the named object.
         self.values = dict()
+
+        # For basic types, the defaults dictionary
+        # contains the value of the object. The key is 'value'
+
+        # For a struct, the defaults dictionary contains values
+        # for each of the members in the struct. The key is the
+        # member name, the value is the member value 
+
+        # For a list, the defaults dictionary contains the defaults
+        # for each type in the list. The key is the type name (bme280:sensor),
+        # The value is a dictionary as per the struct above.
+
         self.defaults = dict()
 
     def clone(self):
         rv = UiObject()
         rv.type = self.type
+        rv.name = self.name
         for key in self.values.keys():
             rv.values[key] = self.values[key]
         for key in self.defaults.keys():
@@ -182,6 +196,7 @@ class UiObject(object):
         s = 'Object:\n'
         if None is not self.type:
             s += '\ttype: ' + str(self.type) + '\n'
+            s += '\tname: ' + str(self.name) + '\n'
             s += '\tvalues: ' + str(self.values) + '\n'
             s += '\tdefaults: ' + str(self.defaults) + '\n'
         return s
@@ -228,7 +243,6 @@ class UiConfig(object):
                         if TYPE_LIST == t.type:
                             obj.values['subtype'] = t.subtype
                     self.components[name][obj.name] = obj
-                    print('[parse_ui] obj: ' + str(obj))
             else:
                 raise InvalidCcsUiFile('ui element not found')
         else:
@@ -237,6 +251,10 @@ class UiConfig(object):
     def parse_struct_node(self,node):
         new_struct = UiStruct()
         ns = None
+
+        if TAG_ABSTRACT in node.attrib.keys():
+            if node.attrib[TAG_ABSTRACT] in AFFIRMATIVE:
+                new_struct.abstract = True
         ns_node = node.find(TAG_NAMESPACE)
         if None is not ns_node:
             ns = ns_node.text.strip()
@@ -265,8 +283,6 @@ class UiConfig(object):
         # FIXME: Do error checking, including name collisions
         self.types[new_struct.name] = new_struct
 
-        #print('[parse_struct_node] new_struct: ' + str(new_struct))
-
     def parse_member_node(self,struct,node):
         new_member = UiMember()
         name_node = node.find(TAG_NAME)
@@ -289,8 +305,9 @@ class UiConfig(object):
         for key in self.types.keys():
             rv.types[key] = self.types[key].clone()
         for comp_name in self.components.keys():
+            rv.components[comp_name] = dict()
             comp = self.components[comp_name]
-            for obj_name in comp[comp_name].keys():
+            for obj_name in comp.keys():
                 rv.components[comp_name][obj_name] = dict()
                 obj = self.components[comp_name][obj_name].clone() 
                 rv.components[comp_name][obj_name] = obj
@@ -336,7 +353,6 @@ class UiConfig(object):
         defaults_node = node.find(TAG_DEFAULTS)
         if None is not defaults_node:
             for def_node in defaults_node:
-                print('[parse_object_node] default: ' + def_node.tag)
                 key = def_node.tag
                 new_object.defaults[key] = def_node.text.strip()
         return new_object
@@ -360,17 +376,28 @@ class UiConfig(object):
                 break
         return rv
 
-    def get_name(self,fullname):
-        rv = ''
-        if fullname.startswith(':'):
-            rv = fullname[1:] 
-        elif ':' in fullname:
-            parts = fullname.split(':')
-            rv = parts[1]
-        else:
-            rv = fullname
+    # Find sub_types of the struct with the given name
+    def find_sub_types(self,name):
+        rv = list()
+        for key in self.types.keys():
+            otype = self.types[key]
+            if isinstance(otype,UiStruct):
+                for nd in otype.super_types:
+                    if name == nd:
+                        rv.append(otype.name)
         return rv
 
+    def find_object(self,app_name,comp_name):
+        rv = None
+        if None is not self.components:
+            for app_key in self.components.keys():
+                if app_name == app_key:
+                    for comp_key in self.components[app_key].keys():
+                        if comp_key == comp_name:
+                            rv = self.components[app_key][comp_key]
+                            break
+        return rv
+        
     def __repr__(self):
         s = 'Config:\n'
         if None is not self.types:

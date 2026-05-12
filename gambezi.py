@@ -1,6 +1,6 @@
 """
-    gambezi.py  
-    Interface for CCS data logger and server configuration 
+    gambezi.py
+    Interface for CCS data logger and server configuration
 
     Copyright (C) 2026 Clear Creek Scientific
 
@@ -52,7 +52,6 @@ UI_FILE           = 'ui.xml'
 KEY_SUBTYPE       = 'subtype'
 KEY_OBJECTS       = 'objects'
 
-AFFIRMATIVE       = ['y','Y','yes','Yes','YES','t','true','True','TRUE']
 
 class GambeziDownloadError(Exception):
     pass
@@ -66,12 +65,275 @@ class GambeziInvalidObject(Exception):
 class UnknownMetaObject(Exception):
     pass
 
+def configure_member(obj,mtype,key):
+        done = False
+        try:
+            while False == done:
+                default = ''
+                if key in obj.defaults:
+                    default = obj.defaults[key]
+                if (key in obj.values):
+                    default = obj.values[key]
+                print('Enter value for ' + mtype.name + ' (' + default + '): ')
+                x = input()
+                # If they just hit enter, keep the current value
+                if len(x) == 0:
+                    x = default
+                if mtype.type == ui_config.TYPE_INT or mtype.type == ui_config.TYPE_CHAR or mtype.type == ui_config.TYPE_BYTE:
+                    x = int(x)
+                elif mtype.type == ui_config.TYPE_FLOAT:
+                    x = float(x)
+                obj.values[key] = x
+                done = True
+        except Exception as e:
+            s = 'Value entry error (' + mtype.name + '): ' + str(e) + '\n'
+            s += mtype.name + ' has type: ' + str(mtype.type) + '\n'
+            if None is not mtype.desc:
+                s += mtype.name + ' description: ' + mtype.desc + '\n'
+            raise GambeziConfigureError(s)
+
+def configure_struct(ui,obj,otype):
+    for key in otype.members.keys():
+        mtype = otype.members[key]
+        if mtype.type in ui_config.BASE_TYPES:
+            configure_member(obj,mtype,key)
+        else:
+            stype = ui.find_type(mtype.type)
+            configure_struct(ui,obj,stype)
+
+def check_file_cache(v,dst):
+    if False == v.cached:
+        if os.path.exists(dst):
+            v.cached = True
+
+def download_app_modules(meta,ui,app):
+    dst = os.path.expanduser(os.path.join(meta.staging,app.name))
+    for x in meta.modules:
+        if x.loader == app.name:
+            download_component(meta.staging,x)
+            parse_ui(meta,ui,x)
+
+def download_component(stage,comp):
+    # Look for base path
+    dst = os.path.expanduser(os.path.join(stage,comp.name))
+    check_file_cache(comp,dst)
+    if False == comp.cached:
+        # Create base path
+        os.makedirs(dst,exist_ok=True)
+        # Get real download path
+        dst = utils.download_file(comp.url,dst,True)
+        if dst is not None:
+            comp.download_path = dst
+            comp.cached = True
+    else:
+        comp.download_path = utils.find_download_dir(dst)
+        print('Skipping download, using cached files in ' + str(comp.download_path))
+    return True
+
+def build_full_type(ui,otype):
+    rv = None
+    if isinstance(otype,ui_config.UiStruct):
+        rv = otype.clone()
+        if len(otype.super_types) > 0:
+            for super_name in otype.super_types:
+                t = ui.find_type(super_name)
+                for key in t.members.keys():
+                    rv.members[key] = t.members[key].clone()             
+    else:
+        raise GambeziInvalidObject('Error trying to build full type for: ' + str(otype))
+    return rv
+
+def fixup_structs(ui):
+    full_types = dict()
+    for key in ui.types.keys():
+        otype = ui.types[key]
+        if isinstance(otype,ui_config.UiStruct):
+            x = build_full_type(ui,otype)
+            full_types[otype.name] = x
+        else:
+            full_types[otype.name] = otype
+    ui.types = full_types
+
+def parse_ui(metabase,ui,comp):
+    dst = os.path.join(comp.download_path,DOCS_DIR)
+    dst = os.path.join(dst,UI_FILE)
+    ui.parse_types(dst)
+    ui.parse_ui(dst,comp.name)
+    fixup_structs(ui)
+
+class CcsListConfigurator(cmd.Cmd):
+    prompt = '> '
+
+    def __init__(self):
+        super().__init__()
+        self.list_name = None
+        self.ui = None
+        self.obj = None
+
+    def setup(self,app,list_name):
+        self.app = app
+        self.ui = app.ui.clone()
+        self.list_name = list_name
+        self.prompt = list_name + '> '
+        self.obj = self.ui.find_object(app.name,list_name)
+
+    def do_cancel(self,arg):
+        'Cancel list configuration and return to application configuration'
+        print('Return to app configuration without saving list? (y/n)')
+        x = input()
+        if x in ui_config.AFFIRMATIVE:
+            return True
+        return False
+
+    def do_show(self,arg):
+        'Show list configuration'
+        print('Available types:')
+        type_names = self.get_available_types()
+        for type_name in type_names:
+            print(type_name)
+        print('----------------------------------------')
+        print('Configured values:')
+        for key in self.obj.values.keys():
+            if KEY_SUBTYPE == key:
+                continue
+            v = self.obj.values[key]
+            print(str(key) + ':')
+            print(str(v))
+        return False
+
+    def do_add(self,arg):
+        'Add a component to the list: i.e. add bme280:sensor'
+        available_types = self.get_available_types()
+        if arg in available_types:
+            mid = input('Please enter an ID for ' + arg + ': ')
+            full_name = arg + '/' + mid
+            otype = self.ui.find_type(arg)
+            if None is not otype:
+                if isinstance(otype,ui_config.UiStruct):
+                    obj = ui_config.UiObject()
+                    configure_struct(self.ui,obj,otype)
+                    obj.values[full_name] = obj
+            else:
+                print("Couldn't find type: " + arg)
+        else:
+            print('Unknown type: ' + arg)
+            print('The following types are available:')
+            for x in available_types:
+                print(x)
+        return False
+
+    def do_remove(self,arg):
+        'Remove a component from the list: i.e. remove <id>'
+        print('FIXME: do_remove')
+        return False
+
+    def do_save(self,arg):
+        'Save the current list and return to app configuration.'
+        print('Saving list and returning to app configuration')
+        self.app.ui = self.ui
+        return True
+
+    def get_available_types(self):
+        type_names = list()
+        if KEY_SUBTYPE in self.obj.values.keys():
+            subtype = self.obj.values['subtype']
+            otype = self.ui.find_type(subtype)
+            if None is not otype:
+                if False == otype.abstract:
+                    parts = otype.name.split()
+                    type_names.append(parts[0])
+                subtype_names = self.ui.find_sub_types(otype.name)
+                for subtype_name in subtype_names:
+                    subtype = self.ui.find_type(subtype_name)
+                    parts = subtype.name.split()
+                    subtype_name = parts[0]
+                    if False == subtype.abstract:
+                        type_names.append(subtype_name)
+        return type_names
+
+class CcsAppConfigurator(cmd.Cmd):
+    prompt = '> '
+
+    def __init__(self):
+        super().__init__()
+        self.meta = None
+        self.ui = None
+
+    def setup(self,parent,name):
+        self.meta = parent.meta
+        self.ui = parent.ui.clone()
+        self.parent = parent
+        self.name = name
+        self.prompt = name + '> '
+        app = None
+        for x in self.meta.apps:
+            if x.name == name:
+                app = x
+        if None is not app:
+            download_app_modules(self.meta,self.ui,app)
+
+    def do_cancel(self,arg):
+        'Cancel app configuration and return to install builder.'
+        print('Return to install builder without saving app configuration? (y/n)')
+        x = input()
+        if x in ui_config.AFFIRMATIVE:
+            return True
+        return False
+
+    def do_set(self,arg):
+        'Set values for the currently selected application in the installation'
+        arg = arg.strip()
+        if None is arg or 0 == len(arg):
+            if self.name in self.ui.components.keys():
+                for key in self.ui.components[self.name]:
+                    obj = self.ui.components[self.name][key]
+                    otype = self.ui.find_type(obj.type)
+                    if isinstance(otype,ui_config.UiStruct):
+                        configure_struct(self.ui,obj,otype)
+                    elif isinstance(otype,ui_config.UiList):
+                        list_config = CcsListConfigurator()
+                        list_config.setup(self,obj.name)
+                        list_config.cmdloop()
+                
+            else:
+                raise GambeziConfigureError("Couldn't find UI configuration for " + self.name)
+        else:
+            found = False
+            for key in self.ui.components[self.name]:
+                if key == arg:
+                    obj = self.ui.components[self.name][key]
+                    otype = self.ui.find_type(obj.type)
+                    if isinstance(otype,ui_config.UiStruct):
+                        configure_struct(self.ui,obj,otype)
+                    elif isinstance(otype,ui_config.UiList):
+                        list_config = CcsListConfigurator()
+                        list_config.setup(self,obj.name)
+                        list_config.cmdloop()
+                    found = True
+            if False == found:
+                print('Unknown component (' + arg + ')')
+                print('The following components are available:')
+                self.do_show(None)
+        return False
+
+
+    def do_save(self,arg):
+        'Save the current app configuration and return to install builder.'
+        print('Saving configuration and returning to install builder')
+        self.parent.set_ui(self.ui)
+        return True
+
+    def do_show(self,arg):
+        'Show application objects that need configuring'
+        for key in self.ui.components[self.name]:
+            print(key) 
+
 class CcsBuildInstaller(cmd.Cmd):
     prompt = 'build installer> '
 
     def __init__(self):
         super().__init__()
-        self.ui = ui_config.UiConfig() 
+        self.ui = ui_config.UiConfig()
 
     def check_build(self):
         print('FIXME: Check to see if the build makes sense.')
@@ -89,30 +351,15 @@ class CcsBuildInstaller(cmd.Cmd):
         self.build_it()
         return False 
 
-    def do_add(self,arg):
-        'Add a component to the installation: i.e. add <module name>'
-        print('FIXME: add')
-        return False
-
-    def do_remove(self,arg):
-        'Remove a component from the installation: i.e. remove <id>'
-        print('FIXME: remove')
-        return False
-
     def do_reset(self,arg):
         'Reset the configuration context (clear cache etc.)'
         if True == os.path.exists(self.meta.staging):
             print('Deleting cache directory: ' + self.meta.staging)
             shutil.rmtree(self.meta.staging)
             os.makedirs(self.meta.staging,exist_ok=True)
+        for x in self.ui.components:
+            x.cached = False
         return False
-
-    def parse_ui(self,metabase):
-        dst = os.path.join(metabase.download_path,DOCS_DIR)
-        dst = os.path.join(dst,UI_FILE)
-        self.ui.parse_types(dst)
-        self.ui.parse_ui(dst,metabase.name)
-        self.fixup_structs()
 
     def parse_local_ui(self):
         dst = os.path.join('.',DOCS_DIR)
@@ -120,42 +367,28 @@ class CcsBuildInstaller(cmd.Cmd):
         self.ui.parse_types(dst)
 
     def do_configure(self,arg):
-        'Configure a component in the installation: i.e. configure logger'
+        'Configure an application in the installation: i.e. configure logger'
         found = False
         for app in self.meta.apps:
             if app.name == arg:
                 found = True
-                if self.download_component(app):
-                    self.parse_ui(app)
+                if download_component(self.meta.staging,app):
+                    parse_ui(self.meta,self.ui,app)
                     self.configure_app(app)
                 else:
                     raise GambeziDownloadError('Error downloading ' + str(app.name))
                 break
-        #if False == found:
-        #    for module in self.meta.modules:
-        #        if module.name == arg:
-        #            found = True
-        #            if self.download_component(module):
-        #                self.parse_ui(module)
-        #                self.configure_uiconfig(module)
-        #            else:
-        #                raise GambeziDownloadError('Error downloading ' + str(module.name) + ': ' + str(e))
-        #        break
-        if False == found: 
+        if False == found:
             print('Cannot configure unknown element: ' + str(arg))
             print('The following are elements that may be configured:')
             print('Apps')
             print('----')
             for app in self.meta.apps:
                 print('\t' + str(app.name))
-            print('Modules')
-            print('-------')
-            for module in self.meta.modules:
-                print('\t' + str(module.name))
-        return False 
+        return False
 
     def do_show(self,arg):
-        'Show installation components and configuration'
+        'Show applications available for configuration'
         if None is not self.meta:
             print('Apps')
             print('--------------')
@@ -164,14 +397,6 @@ class CcsBuildInstaller(cmd.Cmd):
                     s = '\t' + app.name
                     if None is not app.desc:
                         s += ' (' + app.desc + ')'
-                    print(s)
-            print('Modules')
-            print('--------------')
-            if None is not self.meta.modules:
-                for module in self.meta.modules:
-                    s = '\t' + module.name
-                    if None is not module.desc:
-                        s += ' (' + module.desc + ')'
                     print(s)
         return False 
 
@@ -193,99 +418,12 @@ class CcsBuildInstaller(cmd.Cmd):
         except Exception as e:
             print('[parse_metadata] Error parsing metadata: ' + str(e))
 
-    def download_component(self,v):
-        dst = os.path.expanduser(os.path.join(self.meta.staging,v.name))
-        self.check_file_cache(v,dst)
-        if False == v.cached:
-            os.makedirs(dst,exist_ok=True)
-            dst = utils.download_file(v.url,dst,True)
-            if dst is not None:
-                v.download_path = dst
-                v.cached = True
-        else:
-            v.download_path = utils.find_download_dir(dst)
-            print('Skipping download, using cached files in ' + str(v.download_path))
-        return True
-
-    def configure_member(self,obj,mtype,key):
-            done = False
-            try:
-                while False == done:
-                    default = ''
-                    if key in obj.defaults:
-                        default = obj.defaults[key] 
-                    if (key in obj.values):
-                        default = obj.values[key]
-                    print('Enter value for ' + mtype.name + ' (' + default + '): ') 
-                    x = input()
-                    # If they just hit enter, keep the current value 
-                    if len(x) == 0:
-                        x = default 
-                    if mtype.type == ui_config.TYPE_INT or mtype.type == ui_config.TYPE_CHAR or mtype.type == ui_config.TYPE_BYTE:
-                        x = int(x)
-                    elif mtype.type == ui_config.TYPE_FLOAT:
-                        x = float(x)
-                    obj.values[key] = x 
-                    done = True
-            except Exception as e:
-                s = 'Value entry error (' + mtype.name + '): ' + str(e) + '\n'
-                s += mtype.name + ' has type: ' + str(mtype.type) + '\n'
-                if None is not mtype.desc:
-                    s += mtype.name + ' description: ' + mtype.desc + '\n'
-                raise GambeziConfigureError(s)
-
-    def configure_struct(self,obj,otype):
-        for key in otype.members.keys():
-            mtype = otype.members[key]
-            if mtype.type in ui_config.BASE_TYPES:
-                self.configure_member(obj,mtype,key)
-            else:
-                stype = self.ui.find_type(mtype.type)
-                self.configure_struct(obj,stype)
-
-
-    def configure_list(self,obj,otype):
-        if False == isinstance(otype,ui_config.UiList):
-            raise GambeziInvalidObject('Expected UiList, got ' + str(type(otype)))
-        if False == KEY_OBJECTS in obj.values.keys():
-            raise GambeziInvalidObject("Didn't find 'values' key in UiList")
-        mtype = self.ui.find_type(otype.subtype)
-        if None is mtype:
-            raise GambeziInvalidObject("Didn't find subtype: " + otype.subtype)
-        items = obj.values[KEY_OBJECTS]
-        for item in items:
-            current_obj = obj.values[item]
-            current_obj_type = self.ui.find_type(current_obj.type)
-            if ui_config.TYPE_STRUCT == current_obj_type.type:
-                self.configure_struct(current_obj,current_obj_type)
-            else:
-                print('[configure_list] current_obj: ' + str(current_obj))
-                print('[configure_list] current_obj_type: ' + str(current_obj_type))
-
     def configure_app(self,app):
-        if app.name in self.ui.components.keys():
-            for key in self.ui.components[app.name]:
-                obj = self.ui.components[app.name][key]
-                otype = self.ui.find_type(obj.type)
-                if isinstance(otype,ui_config.UiStruct):
-                    self.configure_struct(obj,otype)
-                elif isinstance(otype,ui_config.UiList):
-                    #self.build_list(obj)
-                    #self.configure_list(obj,otype)
-                    self.build_and_configure_list(obj)
-        else:
-            raise GambeziConfigureError("Couldn't find UI configuration for " + app.name)
-
-    def fixup_structs(self):
-        full_types = dict()
-        for key in self.ui.types.keys():
-            otype = self.ui.types[key]
-            if isinstance(otype,ui_config.UiStruct):
-                x = self.build_full_type(otype)
-                full_types[otype.name] = x
-            else:
-                full_types[otype.name] = otype
-        self.ui.types = full_types
+        app_config = CcsAppConfigurator()
+        app_config.setup(self,app.name)
+        app_config.cmdloop()
+        print('[configure_app] configuration finished...')
+        print(self.ui)
 
     def write_app_settings(self,app,path):
         print('Writing settings.cfg for ' + str(app.name) + ' (' + path + ')')
@@ -322,143 +460,12 @@ class CcsBuildInstaller(cmd.Cmd):
             if app.name == name:
                 rv = app
                 if False == app.cached:
-                    if False == self.download_component(app):
+                    if False == self.download_component(self.meta.staging,app):
                         raise GambeziDownloadError('[2] Error downloading ' + str(app.name) + ': ' + str(e))
         return rv
 
-    def build_and_configure_list(self,obj):
-        typelist = list()
-        otype = self.ui.find_type(obj.type)
-        # In the future, we may have other list items besides module names
-        for module in self.meta.modules:
-            search = module.loader + ':' + module.prefix
-            if search == otype.subtype:
-                typelist.append(module.name + ':' + module.prefix)
-            else:
-                super_types = self.ui.find_super_types(obj.type)
-                for t in super_types:
-                    if search == t.subtype:
-                        typelist.append(module.name)
-        done = False
-        objlist = list()
-        while False == done:
-            for mod in typelist:
-                print(mod)
-            x = input('Add a module (y/n)? ')
-            if x in AFFIRMATIVE:
-                ok = False
-                while ok == False:
-                    mname = input('Please enter name: ')
-                    if mname in typelist:
-                        ok = True
-                    else:
-                        print(mname + ' is not a valid type. Please enter one of the following:')
-                        for mod in typelist:
-                            print(mod)
-                mid = input('Please enter an ID for ' + mod + ': ')
-                objlist.append(mname + '/' + mid)
-                found = False
-                basename = mod
-                if ':' in basename:
-                    parts = basename.split(':')
-                    basename = parts[0]
-                for module in self.meta.modules:
-                    if module.name == basename:
-                        found = True
-                        if self.download_component(module):
-                            self.parse_ui(module)
-                            break;
-                        else:
-                            raise GambeziDownloadError('Error downloading ' + str(module.name))
-                if False == found:
-                    raise UnknownMetaObject("Couldn't find meta object named " + mod)
-            else:
-                done = True
-        obj.values[KEY_SUBTYPE] = otype.subtype
-        obj.values[KEY_OBJECTS] = objlist
-        for o in objlist:
-            obj.values[o] = ui_config.UiObject()
-            # FIXME: We need to make this operation generic
-            parts = o.split('/')
-            t = o
-            if 2 == len(parts):
-                t = parts[0]
-    def build_list(self,obj):
-        typelist = list()
-        otype = self.ui.find_type(obj.type)
-        # In the future, we may have other list items besides module names
-        for module in self.meta.modules:
-            search = module.loader + ':' + module.prefix
-            if search == otype.subtype:
-                typelist.append(module.name + ':' + module.prefix)
-            else:
-                super_types = self.ui.find_super_types(obj.type)
-                for t in super_types:
-                    if search == t.subtype:
-                        typelist.append(module.name)
-        done = False
-        objlist = list()
-        while False == done:
-            for mod in typelist:
-                print(mod)
-            x = input('Add a module (y/n)? ')
-            if x in AFFIRMATIVE:
-                ok = False
-                while ok == False:
-                    mname = input('Please enter name: ')
-                    if mname in typelist:
-                        ok = True
-                    else:
-                        print(mname + ' is not a valid type. Please enter one of the following:')
-                        for mod in typelist:
-                            print(mod)
-                mid = input('Please enter an ID for ' + mod + ': ')
-                objlist.append(mname + '/' + mid)
-                found = False
-                basename = mod
-                if ':' in basename:
-                    parts = basename.split(':')
-                    basename = parts[0]
-                for module in self.meta.modules:
-                    if module.name == basename:
-                        found = True
-                        if self.download_component(module):
-                            self.parse_ui(module)
-                            break;
-                        else:
-                            raise GambeziDownloadError('Error downloading ' + str(module.name))
-                if False == found:
-                    raise UnknownMetaObject("Couldn't find meta object named " + mod)
-            else:
-                done = True
-        obj.values[KEY_SUBTYPE] = otype.subtype
-        obj.values[KEY_OBJECTS] = objlist
-        for o in objlist:
-            obj.values[o] = ui_config.UiObject()
-            # FIXME: We need to make this operation generic
-            parts = o.split('/')
-            t = o
-            if 2 == len(parts):
-                t = parts[0]
-            obj.values[o].type = t
-
-    def build_full_type(self,otype):
-        rv = None
-        if isinstance(otype,ui_config.UiStruct):
-            rv = otype.clone()
-            if len(otype.super_types) > 0:
-                for super_name in otype.super_types:
-                    t = self.ui.find_type(super_name)
-                    for key in t.members.keys():
-                        rv.members[key] = t.members[key].clone()             
-        else:
-            raise GambeziInvalidObject('Error trying to build full type for: ' + str(otype))
-        return rv
-
-    def check_file_cache(self,v,dst):
-        if False == v.cached:
-            if os.path.exists(dst):
-                v.cached = True
+    def set_ui(self,ui):
+        self.ui = ui
 
 if '__main__' == __name__:
     print(intro)
