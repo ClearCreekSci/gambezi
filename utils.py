@@ -23,11 +23,34 @@ import os
 import requests
 import zipfile
 
+import const
 
 HTTP_PREFIX       = 'http'
 LOCAL_FILE_PREFIX = 'file://'
-DOCS_DIR          = 'docs'
 
+class GambeziDownloadError(Exception):
+    pass
+
+class GambeziConfigureError(Exception):
+    pass
+
+class GambeziInvalidObject(Exception):
+    pass
+
+class UnknownMetaObject(Exception):
+    pass
+
+class InvalidGambeziMetaFile(Exception):
+    pass
+
+class InvalidGambeziMetaEntry(Exception):
+    pass
+
+class InvalidUiConfigElement(Exception):
+    pass
+
+class InvalidCcsUiFile(Exception):
+    pass
 
 def is_zipfile(path:str) -> bool:
     rv = False
@@ -35,6 +58,21 @@ def is_zipfile(path:str) -> bool:
         buf = fd.read(2)
         if 0x50 == buf[0] and 0x4b == buf[1]:
             rv = True
+    return rv
+
+# Returns the path to the directory with the files (used to get directory without doing a download)
+def find_download_dir(start:str) -> str:
+    rv = None
+    if os.path.isdir(start):
+        files = os.listdir(start)
+        if const.DOCS_DIR in files:
+            rv = start 
+        else:
+            for f in files:
+                if os.path.isdir(os.path.join(start,f)):
+                    rv = find_download_dir(os.path.join(start,f))
+    else:
+        print('[find_download_dir] start is not a directory (' + start + ')')
     return rv
 
 # Returns the path to the directory with the files
@@ -103,18 +141,44 @@ def download_file(src:str,dst:str,verbose:bool=False) -> int:
         return download_local_file(src[len(LOCAL_FILE_PREFIX):],dst,verbose)
 
 
-# Returns the path to the directory with the files (used to get directory without doing a download)
-def find_download_dir(start:str) -> str:
-    rv = None
-    if os.path.isdir(start):
-        files = os.listdir(start)
-        if DOCS_DIR in files:
-            rv = start 
+def configure_member(obj,mtype,key):
+        done = False
+        try:
+            while False == done:
+                default = ''
+                if key in obj.defaults:
+                    default = obj.defaults[key]
+                if (key in obj.values):
+                    default = obj.values[key]
+                print('Enter value for ' + mtype.name + ' (' + default + '): ')
+                x = input()
+                # If they just hit enter, keep the current value
+                if len(x) == 0:
+                    x = default
+                if mtype.type == const.TYPE_INT or mtype.type == const.TYPE_CHAR or mtype.type == const.TYPE_BYTE:
+                    x = int(x)
+                elif mtype.type == const.TYPE_FLOAT:
+                    x = float(x)
+                obj.values[key] = x
+                done = True
+        except Exception as e:
+            s = 'Value entry error (' + mtype.name + '): ' + str(e) + '\n'
+            s += mtype.name + ' has type: ' + str(mtype.type) + '\n'
+            if None is not mtype.desc:
+                s += mtype.name + ' description: ' + mtype.desc + '\n'
+            raise GambeziConfigureError(s)
+
+def configure_struct(ui,obj,otype):
+    for key in otype.members.keys():
+        mtype = otype.members[key]
+        if mtype.type in const.BASE_TYPES:
+            configure_member(obj,mtype,key)
         else:
-            for f in files:
-                if os.path.isdir(os.path.join(start,f)):
-                    rv = find_download_dir(os.path.join(start,f))
-    else:
-        print('[find_download_dir] start is not a directory (' + start + ')')
-    return rv
+            stype = ui.find_type(mtype.type)
+            configure_struct(ui,obj,stype)
+
+def check_file_cache(v,dst):
+    if False == v.cached:
+        if os.path.exists(dst):
+            v.cached = True
 

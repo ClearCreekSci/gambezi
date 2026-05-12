@@ -19,45 +19,10 @@
 
 """ 
 
-class InvalidUiConfigElement(Exception):
-    pass
-
 import xml.etree.ElementTree as et
 
-TAG_ABSTRACT       = 'abstract'
-TAG_CCS_UI         = 'ccs-ui'
-TAG_DEFAULTS       = 'defaults'
-TAG_DESC           = 'desc'
-TAG_INHERITANCE    = 'inheritance'
-TAG_LIST           = 'list'
-TAG_MEMBER         = 'member'
-TAG_NAME           = 'name'
-TAG_NAMESPACE      = 'ns'
-TAG_OBJECT         = 'object'
-TAG_STRUCT         = 'struct'
-TAG_SUBTYPE        = 'subtype'
-TAG_SUPER          = 'super'
-TAG_TYPE           = 'type'
-TAG_TYPES          = 'types'
-TAG_UI             = 'ui'
-
-# Basic Types 
-TYPE_BYTE          = 'byte'
-TYPE_CHAR          = 'char'
-TYPE_INT           = 'int'
-TYPE_FLOAT         = 'float'
-TYPE_STRING        = 'string'
-
-BASE_TYPES         = [TYPE_BYTE,TYPE_CHAR,TYPE_INT,TYPE_FLOAT,TYPE_STRING]
-
-# Complex Types 
-TYPE_STRUCT        = 'struct'
-TYPE_LIST          = 'list'
-
-AFFIRMATIVE       = ['y','Y','yes','Yes','YES','t','true','True','TRUE']
-
-class InvalidCcsUiFile(Exception):
-    pass
+import const
+import utils
 
 class UiMember(object):
 
@@ -102,7 +67,7 @@ class UiStruct(UiType):
     def __init__(self):
         super().__init__()
         self.members = dict()
-        self.type = TYPE_STRUCT 
+        self.type = const.TYPE_STRUCT 
         self.super_types = list()
         self.abstract = False
 
@@ -136,7 +101,7 @@ class UiList(UiType):
     def __init__(self):
         super().__init__()
         self.subtype = None 
-        self.type = TYPE_LIST 
+        self.type = const.TYPE_LIST 
 
     def clone(self):
         rv = UiList()
@@ -214,69 +179,69 @@ class UiConfig(object):
     def parse_types(self,path):
         tree = et.parse(path)
         root = tree.getroot()
-        if root.tag == TAG_CCS_UI:
-            types_node = root.find(TAG_TYPES)
+        if root.tag == const.TAG_CCS_UI:
+            types_node = root.find(const.TAG_TYPES)
             if None is not types_node:
-                struct_nodes = types_node.findall(TAG_STRUCT)
+                struct_nodes = types_node.findall(const.TAG_STRUCT)
                 for struct_node in struct_nodes:
                     self.parse_struct_node(struct_node)
-                list_nodes = types_node.findall(TAG_LIST)
+                list_nodes = types_node.findall(const.TAG_LIST)
                 for list_node in list_nodes:
                     self.parse_list_node(list_node)
             else:
-                raise InvalidCcsUiFile('Types element not found')
+                raise utils.InvalidCcsUiFile('Types element not found')
         else:
-            raise InvalidCcsUiFile('Not a valid CCS UI file')
+            raise utils.InvalidCcsUiFile('Not a valid CCS UI file')
 
     def parse_ui(self,path,name):
         tree = et.parse(path)
         root = tree.getroot()
-        if root.tag == TAG_CCS_UI:
-            ui_node = root.find(TAG_UI)
+        if root.tag == const.TAG_CCS_UI:
+            ui_node = root.find(const.TAG_UI)
             self.components[name] = dict()
             if None is not ui_node:
-                object_nodes = ui_node.findall(TAG_OBJECT)
+                object_nodes = ui_node.findall(const.TAG_OBJECT)
                 for object_node in object_nodes:
                     obj = self.parse_object_node(object_node,name)
                     t = self.find_type(obj.type)
                     if None is not t:
-                        if TYPE_LIST == t.type:
+                        if const.TYPE_LIST == t.type:
                             obj.values['subtype'] = t.subtype
                     self.components[name][obj.name] = obj
             else:
-                raise InvalidCcsUiFile('ui element not found')
+                raise utils.InvalidCcsUiFile('ui element not found')
         else:
-            raise InvalidCcsUiFile('Not a valid CCS UI file')
+            raise utils.InvalidCcsUiFile('Not a valid CCS UI file')
 
     def parse_struct_node(self,node):
         new_struct = UiStruct()
         ns = None
 
-        if TAG_ABSTRACT in node.attrib.keys():
-            if node.attrib[TAG_ABSTRACT] in AFFIRMATIVE:
+        if const.TAG_ABSTRACT in node.attrib.keys():
+            if node.attrib[const.TAG_ABSTRACT] in const.AFFIRMATIVE:
                 new_struct.abstract = True
-        ns_node = node.find(TAG_NAMESPACE)
+        ns_node = node.find(const.TAG_NAMESPACE)
         if None is not ns_node:
             ns = ns_node.text.strip()
-        name_node = node.find(TAG_NAME)
+        name_node = node.find(const.TAG_NAME)
         name = None
         if None is not name_node:
             name = name_node.text.strip()
         if name is None:
-            raise InvalidUiConfigElement('struct element has no name')
+            raise utils.InvalidUiConfigElement('struct element has no name')
         if None is ns:
             new_struct.name = name
         else:
             new_struct.name = ns + ':' + name
-        desc_node = node.find(TAG_DESC)
+        desc_node = node.find(const.TAG_DESC)
         if None is not desc_node:
             new_struct.desc = desc_node.text.strip()
-        member_nodes = node.findall(TAG_MEMBER)
+        member_nodes = node.findall(const.TAG_MEMBER)
         for member_node in member_nodes:
             self.parse_member_node(new_struct,member_node)
-        inheritance_node = node.find(TAG_INHERITANCE)
+        inheritance_node = node.find(const.TAG_INHERITANCE)
         if None is not inheritance_node:
-            super_types = inheritance_node.findall(TAG_SUPER)
+            super_types = inheritance_node.findall(const.TAG_SUPER)
             if None is not super_types:
                 for nd in super_types:
                     new_struct.super_types.append(nd.text.strip())
@@ -285,19 +250,19 @@ class UiConfig(object):
 
     def parse_member_node(self,struct,node):
         new_member = UiMember()
-        name_node = node.find(TAG_NAME)
+        name_node = node.find(const.TAG_NAME)
         if None is not name_node:
             new_member.name = name_node.text.strip()
         else:
-            raise InvalidUiConfigElement('member element has no name')
-        desc_node = node.find(TAG_DESC)
+            raise utils.InvalidUiConfigElement('member element has no name')
+        desc_node = node.find(const.TAG_DESC)
         if None is not desc_node:
             new_member.desc = desc_node.text.strip()
-        type_node = node.find(TAG_TYPE)
+        type_node = node.find(const.TAG_TYPE)
         if None is not type_node:
             new_member.type = type_node.text.strip()
         else:
-            raise InvalidUiConfigElement('member element has no type')
+            raise utils.InvalidUiConfigElement('member element has no type')
         struct.members[new_member.name] = new_member
 
     def clone(self):
@@ -316,23 +281,23 @@ class UiConfig(object):
     def parse_list_node(self,node):
         new_list = UiList()
         ns = None
-        ns_node = node.find(TAG_NAMESPACE)
+        ns_node = node.find(const.TAG_NAMESPACE)
         if None is not ns_node:
             ns = ns_node.text.strip()
         name = None
-        name_node = node.find(TAG_NAME)
+        name_node = node.find(const.TAG_NAME)
         if None is not name_node:
             name = name_node.text.strip()
         if name is None:
-            raise InvalidUiConfigElement('list element has no name')
+            raise utils.InvalidUiConfigElement('list element has no name')
         if None is ns:
             new_list.name = name
         else:
             new_list.name = ns + ':' + name
-        desc_node = node.find(TAG_DESC)
+        desc_node = node.find(const.TAG_DESC)
         if None is not desc_node:
             new_list.desc = desc_node.text.strip()
-        subtype_node = node.find(TAG_SUBTYPE)
+        subtype_node = node.find(const.TAG_SUBTYPE)
         if None is not subtype_node:
             new_list.subtype = subtype_node.text.strip()
         # FIXME: Do error checking, including name collisions
@@ -340,17 +305,17 @@ class UiConfig(object):
 
     def parse_object_node(self,node,name):
         new_object = UiObject()
-        type_node = node.find(TAG_TYPE)
+        type_node = node.find(const.TAG_TYPE)
         if None is not type_node:
             new_object.type = type_node.text.strip()
         else:
-            raise InvalidUiConfigElement('object element has no type')
-        name_node = node.find(TAG_NAME)
+            raise utils.InvalidUiConfigElement('object element has no type')
+        name_node = node.find(const.TAG_NAME)
         if None is not name_node:
             new_object.name = name_node.text.strip()
         else:
-            raise InvalidUiConfigElement('object element has no name')
-        defaults_node = node.find(TAG_DEFAULTS)
+            raise utils.InvalidUiConfigElement('object element has no name')
+        defaults_node = node.find(const.TAG_DEFAULTS)
         if None is not defaults_node:
             for def_node in defaults_node:
                 key = def_node.tag
@@ -387,17 +352,32 @@ class UiConfig(object):
                         rv.append(otype.name)
         return rv
 
-    def find_object(self,app_name,comp_name):
+    def find_object_by_name(self,comp_name,obj_name):
         rv = None
         if None is not self.components:
-            for app_key in self.components.keys():
-                if app_name == app_key:
-                    for comp_key in self.components[app_key].keys():
-                        if comp_key == comp_name:
-                            rv = self.components[app_key][comp_key]
+            for comp_key in self.components.keys():
+                if comp_name == comp_key:
+                    for obj_key in self.components[comp_key].keys():
+                        if obj_key == obj_name:
+                            rv = self.components[comp_key][obj_key]
                             break
         return rv
-        
+
+    def find_object_by_type(self,comp_name,type_name):
+        rv = None
+        if None is not self.components:
+            print('[find{_object_by_type] comp_name: ' + str(comp_name) + ', type_name: ' + str(type_name))
+            for comp_key in self.components.keys():
+                print('[find{_object_by_type] comp_key: ' + str(comp_key))
+                if comp_name == comp_key:
+                    for obj_key in self.components[comp_key].keys():
+                        obj = self.components[comp_key][obj_key]
+                        print('[find{_object_by_type] obj.type: ' + str(obj.type))
+                        if obj.type == type_name:
+                            rv = obj 
+                            break
+        return rv
+
     def __repr__(self):
         s = 'Config:\n'
         if None is not self.types:

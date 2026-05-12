@@ -40,12 +40,6 @@ TAG_STAGING   = 'staging'
 TAG_UICONFIG  = 'ui-config'
 TAG_URL       = 'url'
 
-class InvalidGambeziMetaFile(Exception):
-    pass
-
-class InvalidGambeziMetaEntry(Exception):
-    pass
-
 class MetaBase(object):
 
     def __init__(self):
@@ -97,7 +91,7 @@ class GambeziMeta(object):
             tree = et.parse(path)
             root = tree.getroot()
             if root.tag != TAG_GAMBEZI:
-                raise InvalidGambeziMetaFile("Unrecognized root tag: " + root.tag)
+                raise utils.InvalidGambeziMetaFile("Unrecognized root tag: " + root.tag)
             for paths_node in root.findall(TAG_PATHS):
                 staging_node = paths_node.find(TAG_STAGING)
                 if None is not TAG_STAGING:
@@ -120,12 +114,12 @@ class GambeziMeta(object):
                 if ATTRIB_NAME in module_node.attrib:
                     module.name = module_node.attrib[ATTRIB_NAME]
                 else:
-                    raise InvalidGambeziMetaEntry('Module is missing name value')
+                    raise utils.InvalidGambeziMetaEntry('Module is missing name value')
                 url_node = module_node.find(TAG_URL);
                 if None is not url_node:
                     module.url = url_node.text.strip()     
                 else:
-                    raise InvalidGambeziMetaEntry('Module (' + module.name + ') is missing url value')
+                    raise utils.InvalidGambeziMetaEntry('Module (' + module.name + ') is missing url value')
                 desc_node = module_node.find(TAG_DESC);
                 if None is not desc_node:
                     module.desc = desc_node.text.strip()     
@@ -133,7 +127,7 @@ class GambeziMeta(object):
                 if None is not loader_node:
                     module.loader = loader_node.text.strip()     
                 else:
-                    raise InvalidGambeziMetaEntry('Module (' + module.name + ') is missing loader value')
+                    raise utils.InvalidGambeziMetaEntry('Module (' + module.name + ') is missing loader value')
                 prefix_node = module_node.find(TAG_PREFIX);
                 if None is not prefix_node:
                     module.prefix = prefix_node.text.strip()     
