@@ -140,45 +140,21 @@ def download_file(src:str,dst:str,verbose:bool=False) -> int:
     elif src.startswith(LOCAL_FILE_PREFIX):
         return download_local_file(src[len(LOCAL_FILE_PREFIX):],dst,verbose)
 
-
-def configure_member(obj,mtype,key):
-        done = False
-        try:
-            while False == done:
-                default = ''
-                if key in obj.defaults:
-                    default = obj.defaults[key]
-                if (key in obj.values):
-                    default = obj.values[key]
-                print('Enter value for ' + mtype.name + ' (' + default + '): ')
-                x = input()
-                # If they just hit enter, keep the current value
-                if len(x) == 0:
-                    x = default
-                if mtype.type == const.TYPE_INT or mtype.type == const.TYPE_CHAR or mtype.type == const.TYPE_BYTE:
-                    x = int(x)
-                elif mtype.type == const.TYPE_FLOAT:
-                    x = float(x)
-                obj.values[key] = x
-                done = True
-        except Exception as e:
-            s = 'Value entry error (' + mtype.name + '): ' + str(e) + '\n'
-            s += mtype.name + ' has type: ' + str(mtype.type) + '\n'
-            if None is not mtype.desc:
-                s += mtype.name + ' description: ' + mtype.desc + '\n'
-            raise GambeziConfigureError(s)
-
-def configure_struct(ui,obj,otype):
-    for key in otype.members.keys():
-        mtype = otype.members[key]
-        if mtype.type in const.BASE_TYPES:
-            configure_member(obj,mtype,key)
-        else:
-            stype = ui.find_type(mtype.type)
-            configure_struct(ui,obj,stype)
-
 def check_file_cache(v,dst):
     if False == v.cached:
         if os.path.exists(dst):
             v.cached = True
+
+def get_simple_name(s):
+    rv = s
+    parts = s.split(':')
+    if len(parts) == 2:
+        rv = parts[1]
+    return rv
+
+def should_quit(msg):
+    print('')
+    x = input(msg)
+    return x == 'q'
+
 

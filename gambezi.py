@@ -30,7 +30,7 @@ import metadata
 import ui_config
 import utils
 
-intro = '''
+banner = '''
   ________              ___.                 .__ 
  /  _____/_____    _____\\_ |__   ____ _______|__|
 /   \\  ___\\__  \\  /     \\| __ \\_/ __ \\\\___   /  |
@@ -39,9 +39,16 @@ intro = '''
         \\/     \\/      \\/    \\/     \\/      \\/   
 '''
 
+intro = '''
+Gambezi is a command-line python program used to create installation bundles
+for Clear Creek Scientific applications. It is not as easy to use as programs
+with a graphical user interface, but it runs everywhere python does without
+needing to install any additional libraries. To learn how to use Gambezi, type
+"help" (without the quotes) at anytime to see the available commands.
+'''
+
 DEFAULT_META_PATH = './meta.xml'
 
-XML_PREFIX        = '<?xml version="1.0" encoding="UTF-8"?>'
 TAG_CONFIG_ROOT   = 'ccs-config'
 ATTRIB_VERSION    = 'version='
 CONFIG_VERSION    = '"2"'
@@ -97,15 +104,59 @@ def download_component(stage,comp):
             comp.download_path = downloaded
             comp.cached = True
         else:
-            #try:
-            os.rmdir(dst)
-            #except Exception:
-            #    pass
+            try:
+                os.rmdir(dst)
+            except Exception as e:
+                print('Error removing cache directory (' + dst + '): ' + str(e))
             return False
     else:
         comp.download_path = utils.find_download_dir(dst)
         print('Skipping download, using cached files in ' + str(comp.download_path))
     return True
+
+def configure_member(obj,mtype,key):
+        done = False
+        try:
+            while False == done:
+                default = ''
+                if key in obj.defaults:
+                    default = obj.defaults[key]
+                if (key in obj.values):
+                    default = obj.values[key]
+                print('Enter value for ' + mtype.name + ' (' + str(default) + '): ')
+                x = input()
+                # If they just hit enter, keep the current value
+                if len(x) == 0:
+                    x = default
+
+                print('[configure_member] setting ' + str(key) + ' to ' + str(x))
+
+                obj.values[key] = x
+                done = True
+        except Exception as e:
+            s = 'Value entry error (' + mtype.name + '): ' + str(e) + '\n'
+            s += mtype.name + ' has type: ' + str(mtype.type) + '\n'
+            if None is not mtype.desc:
+                s += mtype.name + ' description: ' + mtype.desc + '\n'
+            raise GambeziConfigureError(s)
+
+def configure_struct(ui,obj,otype):
+    for key in otype.members.keys():
+        mtype = otype.members[key]
+        if mtype.type in const.BASE_TYPES:
+            if False == mtype.ignore:
+                configure_member(obj,mtype,key)
+        else:
+            new_object = ui_config.UiObject() 
+            new_object.name = key 
+            new_object.type = otype.name
+            # Copy all the defaults to each object because we don't know which
+            # ones different members will require...
+            for defkey in obj.defaults.keys():
+                new_object.defaults[defkey] = obj.defaults[defkey]
+            stype = ui.find_type(mtype.type)
+            configure_struct(ui,new_object,stype)
+            obj.values[key] = new_object 
 
 class CcsListConfigurator(cmd.Cmd):
     prompt = '> '
@@ -132,42 +183,48 @@ class CcsListConfigurator(cmd.Cmd):
         return False
 
     def do_show(self,arg):
-        'Show list configuration'
-        print('Available types:')
-        type_names = self.get_available_types()
-        for type_name in type_names:
-            print(type_name)
-        print('----------------------------------------')
-        print('Configured values:')
-        for key in self.obj.values.keys():
-            if const.TAG_SUBTYPE == key:
-                continue
-            v = self.obj.values[key]
+        'Show list item types [show types] or list item values [show values]'
+        if arg == 'types':
+            print('Available types:')
+            atypes = self.get_available_types()
+            for atype in atypes:
+                obj = self.ui.find_object_by_type(atype.name)
+                print(obj.name)
+        elif arg == 'values':
+            print('Configured values:')
+            for key in self.obj.values.keys():
+                if const.TAG_SUBTYPE == key:
+                    continue
+                v = self.obj.values[key]
+                print(key + ':\n')
+                print(v)
+        else:
+            print('Unknown option: ' + str(arg))
+            print('The available options are "types" or "values"')
         return False
 
     def do_add(self,arg):
-        'Add a component to the list: i.e. add bme280:sensor'
-        available_types = self.get_available_types()
-        if arg in available_types:
-            mid = input('Please enter an ID for ' + arg + ': ')
-            full_name = arg + '/' + mid
-            otype = self.ui.find_type(arg)
-            if None is not otype:
-                if isinstance(otype,ui_config.UiStruct):
-                    parts = arg.split(':')
-                    obj = self.ui.find_object_by_type(parts[0],arg)
-                    if None is not obj:
-                        utils.configure_struct(self.ui,obj,otype)
+        'Add a component to the list: i.e. add bme280'
+        found = False
+        atypes = self.get_available_types()
+        for atype in atypes:
+            obj = self.ui.find_object_by_type(atype.name)
+            if None is not obj:
+                if arg == obj.name:
+                    mid = input('Please enter an ID for ' + arg + ': ')
+                    full_name = arg + '/' + mid
+                    if isinstance(atype,ui_config.UiStruct):
+                        obj = obj.clone()
+                        configure_struct(self.ui,obj,atype)
                         self.obj.values[full_name] = obj
+                        found = True
                     else:
-                        print("Couldn't find obj: " + parts[0])
-            else:
-                print("Couldn't find type: " + arg)
-        else:
+                        print('Trying to add invalid type (' + str(type(atype)) + ') to the application')
+        if False == found:
             print('Unknown type: ' + arg)
             print('The following types are available:')
-            for x in available_types:
-                print(x)
+            for x in atypes:
+                print(x.name)
         return False
 
     def do_remove(self,arg):
@@ -182,21 +239,19 @@ class CcsListConfigurator(cmd.Cmd):
         return True
 
     def get_available_types(self):
-        type_names = list()
+        atypes = list()
         if const.TAG_SUBTYPE in self.obj.values.keys():
             subtype = self.obj.values[const.TAG_SUBTYPE]
             otype = self.ui.find_type(subtype)
             if None is not otype:
                 if False == otype.abstract:
-                    type_names.append(otype.name)
+                    atypes.append(otype)
                 subtype_names = self.ui.find_sub_types(otype.name)
                 for subtype_name in subtype_names:
                     subtype = self.ui.find_type(subtype_name)
-                    parts = subtype.name.split()
-                    subtype_name = parts[0]
-                    if False == subtype.abstract:
-                        type_names.append(subtype_name)
-        return type_names
+                    if (None is not subtype) and (False == subtype.abstract):
+                        atypes.append(subtype)
+        return atypes
 
 class CcsAppConfigurator(cmd.Cmd):
     prompt = '> '
@@ -236,7 +291,7 @@ class CcsAppConfigurator(cmd.Cmd):
                     obj = self.ui.components[self.name][key]
                     otype = self.ui.find_type(obj.type)
                     if isinstance(otype,ui_config.UiStruct):
-                        utils.configure_struct(self.ui,obj,otype)
+                        configure_struct(self.ui,obj,otype)
                     elif isinstance(otype,ui_config.UiList):
                         list_config = CcsListConfigurator()
                         list_config.setup(self,obj.name)
@@ -251,7 +306,7 @@ class CcsAppConfigurator(cmd.Cmd):
                     obj = self.ui.components[self.name][key]
                     otype = self.ui.find_type(obj.type)
                     if isinstance(otype,ui_config.UiStruct):
-                        utils.configure_struct(self.ui,obj,otype)
+                        configure_struct(self.ui,obj,otype)
                     elif isinstance(otype,ui_config.UiList):
                         list_config = CcsListConfigurator()
                         list_config.setup(self,obj.name)
@@ -268,36 +323,65 @@ class CcsAppConfigurator(cmd.Cmd):
     def do_save(self,arg):
         'Save the current app configuration and return to install builder.'
         print('Saving configuration and returning to install builder')
+        for comp_key in self.ui.components[self.name].keys():
+            comp = self.ui.components[self.name][comp_key]
+            if 0 == len(comp.values):
+                for def_key in comp.defaults.keys():
+                    comp.values[def_key] = comp.defaults[def_key]
         self.parent.set_ui(self.ui)
+        for x in self.meta.apps:
+            if x.name == self.name:
+                x.configured = True
         return True
 
     def do_show(self,arg):
         'Show application objects that need configuring'
         for key in self.ui.components[self.name]:
-            print(str(key)) 
-            print(str(self.ui.components[self.name][key]))
+            print(str(key))
+            #print(str(self.ui.components[self.name][key]))
 
 class CcsBuildInstaller(cmd.Cmd):
     prompt = 'build installer> '
 
     def __init__(self):
         super().__init__()
+        self.meta = None
         self.ui = ui_config.UiConfig()
 
+    # Returns True if everything is OK
+    # Returns False if there is a problem
     def check_build(self):
-        print('FIXME: Check to see if the build makes sense.')
-        print('For example:')
-        print('Check to see if any lists are empty. (list items are added by modules?)')
-        print('Check to see if the modules have conflicting settings (are we making this configurable)?')
-        print('etc.')
+        rv = True
+        #print('[check_build] ui: ' + str(self.ui))
+        for comp_key in self.ui.components.keys():
+            #print('[check_build] comp_key: ' + str(comp_key))
+            comp = self.ui.components[comp_key]
+            if hasattr(comp,'configured') and comp.configured:
+                for obj_key in self.ui.components[comp_key].keys():
+                    obj = self.ui.components[comp_key][obj_key]
+                    v = obj.values
+                    if 0 == len(obj.values):
+                        print("Can't build. Empty value found for " + str(obj.name))
+                        rv = False
+                    # if it has a 'subtype' tag, treat it as a list
+                    elif const.TAG_SUBTYPE in v.keys():
+                        # if the list doesn't have anything else in it 
+                        if 1 == len(v.keys()):
+                            print("Can't build. Empty list found for " + str(obj.name))
+                            rv = False
+        return rv
 
     def build_it(self):
-        print('FIXME: build_it')
+        if None is not self.meta.apps:
+            for app in self.meta.apps:
+                if app.configured:
+                    path = os.path.join(app.download_path,const.SETTINGS_FILE_NAME)
+                    self.write_app_settings(app,path)
 
     def do_build(self,arg):
         'Build the installer'
-        self.check_build()
-        self.build_it()
+        if True == self.check_build():
+            self.build_it()
         return False 
 
     def do_reset(self,arg):
@@ -306,8 +390,12 @@ class CcsBuildInstaller(cmd.Cmd):
             print('Deleting cache directory: ' + self.meta.staging)
             shutil.rmtree(self.meta.staging)
             os.makedirs(self.meta.staging,exist_ok=True)
-        for x in self.ui.components:
-            x.cached = False
+        print('Resetting cached values')
+        for app in self.meta.apps:
+            app.cached = False
+            app.configured = False
+        for mod in self.meta.modules:
+            mod.cached = False
         return False
 
     def parse_local_ui(self):
@@ -340,7 +428,7 @@ class CcsBuildInstaller(cmd.Cmd):
         'Show applications available for configuration'
         if None is not self.meta:
             print('Apps')
-            print('--------------')
+            print('----')
             if None is not self.meta.apps:
                 for app in self.meta.apps:
                     s = '\t' + app.name
@@ -349,6 +437,27 @@ class CcsBuildInstaller(cmd.Cmd):
                     print(s)
         return False 
 
+    def do_tutorial(self,arg):
+        'Displays a short tutorial on how to use gambezi'
+        print("\nThe 'show' command will show the apps that can be configured")
+        print("For example:")
+        print('build_installer> show')
+        print('Apps')
+        print('----')
+        print('\tlogger (Collect and store data from sensors)')
+        print('\tserver (Display collected data in a web browser)')
+        if utils.should_quit("[press 'q' to quit, any other key to continue]"):
+            return False
+        print("\nThe 'configure' command requires the name of one of the apps")
+        print("displayed by the 'show' command. Typing 'configure' followed")
+        print("by an app name will start the configuration process for that")
+        print("app. For example:")
+        print('build_installer> configure logger')
+        print('logger>')
+        #if utils.should_quit("[press 'q' to quit, any other key to continue]"):
+        #    return False
+        return False
+  
     def do_quit(self,arg):
         'Quit the program'
         return True
@@ -371,36 +480,69 @@ class CcsBuildInstaller(cmd.Cmd):
         app_config = CcsAppConfigurator()
         app_config.setup(self,app.name)
         app_config.cmdloop()
-        #print('[configure_app] configuration finished...')
-        #print(self.ui)
+
+    def write_settings_list(self,obj,fd):
+        if None is not obj.values:
+            if False == const.TAG_SUBTYPE in obj.values.keys():
+                # FIXME: throw an exception?
+                return
+            name = obj.name
+            subname = obj.values[const.TAG_SUBTYPE]
+            subtype = self.ui.find_type(subname)
+            fd.write('<' + name + '>\n')
+            for key in obj.values.keys():
+                if key == const.TAG_SUBTYPE:
+                    continue
+                subobj = obj.values[key]
+                if isinstance(subtype,ui_config.UiStruct):
+                    self.write_settings_struct(subobj,fd,subtype.name) 
+                elif isinstance(subtype,ui_config.UiList):
+                    self.write_settings_list(subobj,fd)
+                else:
+                    print('[write_settings_list] ????????????????????')
+            fd.write('</' + name + '>\n')
+
+    # The 'name' parameter needs a little explanation. It is currently only
+    # used when calling write_settings_struct from write_settings_list. By
+    # setting 'name' to the list's subtype name, each object in the list
+    # will get a surrounding tag with the subtype name.
+    def write_settings_struct(self,obj,fd,name=None):
+        write_extra_name = False
+        if None is name:
+            name = obj.name
+        else:
+            name = utils.get_simple_name(name)
+            write_extra_name = True
+        fd.write('<' + name + '>\n')
+
+        if write_extra_name:
+            fd.write('<name>')
+            fd.write(obj.name)
+            fd.write('</name>\n')
+        for key in obj.values.keys():
+            member = obj.values[key]
+            if isinstance(member,ui_config.UiObject):
+                self.write_settings_struct(member,fd)
+            else:
+                fd.write('<' + key + '>\n')
+                fd.write(str(member) + '\n')
+                fd.write('</' + key + '>\n')
+        fd.write('</' + name + '>\n')
 
     def write_app_settings(self,app,path):
         print('Writing settings.cfg for ' + str(app.name) + ' (' + path + ')')
         with open(path,'wt') as fd:
-            fd.write(XML_PREFIX + '\n')
+            fd.write(const.XML_PREFIX + '\n')
             fd.write('<' + TAG_CONFIG_ROOT + ' ' + ATTRIB_VERSION + CONFIG_VERSION + '>\n')
             for key in self.ui.components[app.name].keys():
                 obj = self.ui.components[app.name][key]
-                otype = app.ui_types.find_type(obj.type)
+                otype = self.ui.find_type(obj.type)
                 if isinstance(otype,ui_config.UiStruct):
-                    name = app.ui_types.get_name(obj.type)
-                    fd.write('<' + name + '>\n')
-                    for key in otype.members.keys():
-                        member = otype.members[key]
-                        fd.write('<' + member.name + '>\n')
-                        fd.write(str(member.default) + '\n')
-                        fd.write('</' + member.name + '>\n')
-                    fd.write('</' + name + '>\n')
+                    self.write_settings_struct(obj,fd) 
                 elif isinstance(otype,ui_config.UiList):
-                    # FIXME: This is all kinds of broken...
-                    #stype = app.ui_config.find_type(obj.type)
-                    name = app.ui_types.get_name(obj.type)
-                    fd.write('<' + name + '>\n')
-                    #for key in stype.members.keys():
-                    #    fd.write('<' + stype.name + '>\n')
-                    #    fd.write(str(stype.members))
-                    #    fd.write('</' + stype.name + '>\n')
-                    fd.write('</' + name + '>\n')
+                    self.write_settings_list(obj,fd)
+                else:
+                    print('[write_app_settings] ????????????????????')
             fd.write('</' + TAG_CONFIG_ROOT + '>\n')
 
     def get_loader_app(self,name):
@@ -417,12 +559,13 @@ class CcsBuildInstaller(cmd.Cmd):
         self.ui = ui
 
 if '__main__' == __name__:
+    print(banner)
     print(intro)
     try:
         build_installer = CcsBuildInstaller()
         build_installer.parse_metadata(DEFAULT_META_PATH)
         build_installer.parse_local_ui()
-        build_installer.do_help('')
+        # build_installer.do_help('')
         build_installer.cmdloop()
     except Exception as e:
         print(traceback.format_exc())

@@ -30,22 +30,26 @@ class UiMember(object):
         self.name = None
         self.type = None
         self.desc = None
+        self.ignore = False
 
     def clone(self):
         rv = UiMember()
         rv.name = self.name
         rv.type = self.type
         rv.desc = self.desc
+        rv.ignore = self.ignore
         return rv
 
     def __repr__(self):
-        s = 'Member:\n'
+        s = ''
         if hasattr(self,'name') and None is not self.name:
             s += '\tname: ' + str(self.name) + '\n'
         if hasattr(self,'type') and None is not self.type:
             s += '\ttype: ' + str(self.type) + '\n'
         if hasattr(self,'desc') and None is not self.desc:
             s += '\tdesc: ' + str(self.desc) + '\n'
+        if hasattr(self,'ignore') and None is not self.desc:
+            s += '\tignore: ' + str(self.ignore) + '\n'
         return s
 
 class UiType(object):
@@ -158,12 +162,27 @@ class UiObject(object):
         return rv
 
     def __repr__(self):
-        s = 'Object:\n'
+        s = ''
         if None is not self.type:
             s += '\ttype: ' + str(self.type) + '\n'
+        else:
+            s += '\ttype: unknown' + '\n'
+        if None is not self.name:
             s += '\tname: ' + str(self.name) + '\n'
-            s += '\tvalues: ' + str(self.values) + '\n'
-            s += '\tdefaults: ' + str(self.defaults) + '\n'
+        else:
+            s += '\tname: unknown' + '\n'
+        if None is not self.values:
+            s += '\tvalues:\n'
+            for key in self.values.keys():
+                s += '\t\t' + str(key) + ': ' + str(self.values[key]) + '\n'
+        else:
+            s += '\tvalues: unknown' + '\n'
+        if None is not self.defaults:
+            s += '\tdefaults:\n'
+            for key in self.defaults.keys():
+                s += '\t\t' + str(key) + ': ' + str(self.defaults[key]) + '\n'
+        else:
+            s += '\tdefaults: unknown' + '\n'
         return s
 
 class UiConfig(object):
@@ -250,6 +269,9 @@ class UiConfig(object):
 
     def parse_member_node(self,struct,node):
         new_member = UiMember()
+        if const.TAG_IGNORE in node.attrib.keys():
+            if node.attrib[const.TAG_IGNORE] in const.AFFIRMATIVE:
+                new_member.ignore = True
         name_node = node.find(const.TAG_NAME)
         if None is not name_node:
             new_member.name = name_node.text.strip()
@@ -363,29 +385,26 @@ class UiConfig(object):
                             break
         return rv
 
-    def find_object_by_type(self,comp_name,type_name):
+    def find_object_by_type(self,name):
         rv = None
         if None is not self.components:
-            print('[find{_object_by_type] comp_name: ' + str(comp_name) + ', type_name: ' + str(type_name))
             for comp_key in self.components.keys():
-                print('[find{_object_by_type] comp_key: ' + str(comp_key))
-                if comp_name == comp_key:
-                    for obj_key in self.components[comp_key].keys():
-                        obj = self.components[comp_key][obj_key]
-                        print('[find{_object_by_type] obj.type: ' + str(obj.type))
-                        if obj.type == type_name:
-                            rv = obj 
-                            break
+                for obj_key in self.components[comp_key].keys():
+                    obj = self.components[comp_key][obj_key]
+                    if obj.type == name:
+                        rv = obj
+                        break
         return rv
 
     def __repr__(self):
-        s = 'Config:\n'
+        s = ''
         if None is not self.types:
             s += '***** Types *****\n'
             for v in self.types:
                 s += str(self.types[v]) 
             s += '\n'
         if None is not self.components:
+            s += '***** Components *****\n'
             for c in self.components:
                 s += c + '\n'
                 for o in self.components[c]:

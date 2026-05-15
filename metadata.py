@@ -56,12 +56,16 @@ class MetaApp(MetaBase):
     def __init__(self):
         super().__init__()
         self.loader = 'self'
+        self.configured = False
 
     def __repr__(self):
         s = 'MetaApp\n'
-        s += 'name: ' + self.name + '\n'
-        s += 'url: ' + self.url + '\n'
-        s += 'desc: ' + self.desc + '\n'
+        s += 'name: ' + str(self.name) + '\n'
+        s += 'url: ' + str(self.url) + '\n'
+        s += 'desc: ' + str(self.desc) + '\n'
+        s += 'cached: ' + str(self.cached) + '\n'
+        s += 'download_path: ' + str(self.download_path) + '\n'
+        s += 'loader: ' + str(str(self.loader)) + '\n'
         return s
 
 class MetaModule(MetaBase):
@@ -72,10 +76,12 @@ class MetaModule(MetaBase):
 
     def __repr__(self):
         s = 'MetaModule\n'
-        s += 'name: ' + self.name + '\n'
-        s += 'url: ' + self.url + '\n'
-        s += 'desc: ' + self.desc + '\n'
-        s += 'loader: ' + str(self.loader) + '\n'
+        s += 'name: ' + str(self.name) + '\n'
+        s += 'url: ' + str(self.url) + '\n'
+        s += 'desc: ' + str(self.desc) + '\n'
+        s += 'cached: ' + str(self.cached) + '\n'
+        s += 'download_path: ' + str(self.download_path) + '\n'
+        s += 'loader: ' + str(str(self.loader)) + '\n'
         s += 'prefix: ' + str(self.prefix) + '\n'
         return s
 
@@ -135,3 +141,9 @@ class GambeziMeta(object):
         else:
             raise FileNotFoundError("Couldn't find meta file: " + path)
 
+    def __repr__(self):
+        s = 'MetaModule\n'
+        s += 'staging: ' + str(self.staging) + '\n'
+        s += 'apps: ' + str(self.apps) + '\n'
+        s += 'modules: ' + str(self.modules) + '\n'
+        return s
