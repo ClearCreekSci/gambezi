@@ -35,6 +35,19 @@ TAG_SUPER          = 'super'
 TAG_TYPE           = 'type'
 TAG_TYPES          = 'types'
 TAG_UI             = 'ui'
+TAG_VALUE          = 'value'
 
 XML_PREFIX         = '<?xml version="1.0" encoding="UTF-8"?>'
+DEPLOYMENT_DIR     = 'deployment'
 SETTINGS_FILE_NAME = 'settings.cfg'
+
+DOWNLOAD_FAILED    = -1
+DOWNLOAD_SKIPPED   = 0
+DOWNLOAD_COMPLETED = 1
+
+SHELL_SUFFIX       = '.sh'
+ZIP_SUFFIX         = '.zip'
+GITHUB_MAIN_SUFFIX = '-main'
+DEPLOY_DIR         = 'deployment'
+
+ID_SEP             = '/'

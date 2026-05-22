@@ -71,8 +71,6 @@ def find_download_dir(start:str) -> str:
             for f in files:
                 if os.path.isdir(os.path.join(start,f)):
                     rv = find_download_dir(os.path.join(start,f))
-    else:
-        print('[find_download_dir] start is not a directory (' + start + ')')
     return rv
 
 # Returns the path to the directory with the files
@@ -139,6 +137,31 @@ def download_file(src:str,dst:str,verbose:bool=False) -> int:
         return download_http(src,dst,verbose)
     elif src.startswith(LOCAL_FILE_PREFIX):
         return download_local_file(src[len(LOCAL_FILE_PREFIX):],dst,verbose)
+
+def download_component(stage,comp):
+    rv = const.DOWNLOAD_COMPLETED
+    # Look for base path
+    dst = os.path.expanduser(os.path.join(stage,comp.name))
+    check_file_cache(comp,dst)
+    if False == comp.cached:
+        # Create base path
+        os.makedirs(dst,exist_ok=True)
+        # Get real download path
+        downloaded = download_file(comp.url,dst,True)
+        if downloaded is not None:
+            comp.download_path = downloaded
+            comp.cached = True
+        else:
+            try:
+                os.rmdir(dst)
+            except Exception as e:
+                print('Error removing cache directory (' + dst + '): ' + str(e))
+            rv = const.DOWNLOAD_FAILED
+    else:
+        comp.download_path = find_download_dir(dst)
+        print('Skipping download, using cached files in ' + str(comp.download_path))
+        rv = const.DOWNLOAD_SKIPPED
+    return rv
 
 def check_file_cache(v,dst):
     if False == v.cached:

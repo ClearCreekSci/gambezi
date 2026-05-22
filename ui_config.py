@@ -116,7 +116,7 @@ class UiList(UiType):
 
     def __repr__(self):
         s = super().__repr__()
-        if hasattr(self,'subtype') and None is not self.subtype:
+        if hasattr(self,const.TAG_SUBTYPE) and None is not self.subtype:
             s += '\tsubtype: ' + str(self.subtype) + '\n'
         return s
 
@@ -225,7 +225,7 @@ class UiConfig(object):
                     t = self.find_type(obj.type)
                     if None is not t:
                         if const.TYPE_LIST == t.type:
-                            obj.values['subtype'] = t.subtype
+                            obj.values[const.TAG_SUBTYPE] = t.subtype
                     self.components[name][obj.name] = obj
             else:
                 raise utils.InvalidCcsUiFile('ui element not found')
