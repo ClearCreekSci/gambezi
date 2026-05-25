@@ -177,12 +177,12 @@ class UiObject(object):
                 s += '\t\t' + str(key) + ': ' + str(self.values[key]) + '\n'
         else:
             s += '\tvalues: unknown' + '\n'
-        if None is not self.defaults:
-            s += '\tdefaults:\n'
-            for key in self.defaults.keys():
-                s += '\t\t' + str(key) + ': ' + str(self.defaults[key]) + '\n'
-        else:
-            s += '\tdefaults: unknown' + '\n'
+        #if None is not self.defaults:
+        #    s += '\tdefaults:\n'
+        #    for key in self.defaults.keys():
+        #        s += '\t\t' + str(key) + ': ' + str(self.defaults[key]) + '\n'
+        #else:
+        #    s += '\tdefaults: unknown' + '\n'
         return s
 
 class UiConfig(object):
@@ -390,10 +390,12 @@ class UiConfig(object):
         if None is not self.components:
             for comp_key in self.components.keys():
                 for obj_key in self.components[comp_key].keys():
+                    print('Object key: ' + str(obj_key))
                     obj = self.components[comp_key][obj_key]
                     if obj.type == name:
                         rv = obj
-                        break
+                        #break
+                        print('Found object: ' + str(name))
         return rv
 
     def __repr__(self):

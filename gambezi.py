@@ -24,6 +24,7 @@ import cmd
 import sys
 import shutil
 import stat
+import subprocess
 import traceback
 
 import const
@@ -184,8 +185,8 @@ class CcsListConfigurator(cmd.Cmd):
             print('Available types:')
             atypes = self.get_available_types()
             for atype in atypes:
-                obj = self.ui.find_object_by_type(atype.name)
-                print(obj.name)
+                comp = self.ui.find_component_by_type(atype.name)
+                print(comp.name)
         elif arg == 'values':
             print('Configured values:')
             for key in self.obj.values.keys():
@@ -204,9 +205,9 @@ class CcsListConfigurator(cmd.Cmd):
         found = False
         atypes = self.get_available_types()
         for atype in atypes:
-            obj = self.ui.find_object_by_type(atype.name)
-            if None is not obj:
-                if arg == obj.name:
+            comp = self.ui.find_comp_by_type(atype.name)
+            if None is not comp:
+                if arg == comp.name:
                     if isinstance(atype,ui_config.UiStruct):
                         name_ok = False
                         while False == name_ok:
@@ -236,6 +237,20 @@ class CcsListConfigurator(cmd.Cmd):
                     print(obj.name)
         return False
 
+    def complete_add(self,text,line,begidx,endidx):
+        rv = list()
+        atypes = self.get_available_types()
+        if 0 == begidx and 0 == endidx:
+            for atype in atypes:
+                rv.append(atype.name)
+        else:
+            for atype in atypes:
+                if atype.name.startswith(line[begidx:endidx]):
+                    parts = atype.name.split(const.TYPE_SEP)
+                    if len(parts) == 2:
+                        rv.append(parts[0])
+        return rv
+
     def do_remove(self,arg):
         'Remove a component from the list: i.e. remove <id>'
         fullname = None
@@ -257,13 +272,31 @@ class CcsListConfigurator(cmd.Cmd):
                             fullname = key
                             break
             if None is not x:
-                x = input('Remove component with ID: ' + str(arg) + '?')
+                x = input('Remove component with ID: ' + str(arg) + '? (y/n) ')
                 if x in const.AFFIRMATIVE:
                     if None is not fullname:
                         self.obj.values.pop(fullname)
             else:
                 print("Couldn't find component with ID: " + '"' + str(arg) + '"')
         return False
+
+    def complete_remove(self,text,line,begidx,endidx):
+        rv = list()
+        atypes = self.get_available_types()
+        if 0 == begidx and 0 == endidx:
+            for key in self.obj.values.keys():
+                if const.ID_SEP in key:
+                    parts = key.split(const.ID_SEP)
+                    if len(parts) == 2:
+                        rv.append(parts[1])
+        else:
+            for key in self.obj.values.keys():
+                if const.ID_SEP in key:
+                    parts = key.split(const.ID_SEP)
+                    if len(parts) == 2:
+                        if parts[1].startswith(line[begidx:endidx]):
+                            rv.append(parts[1])
+        return rv
 
     def do_save(self,arg):
         'Save the current list and return to app configuration.'
@@ -454,9 +487,13 @@ class CcsBuildInstaller(cmd.Cmd):
         if None is not self.meta.apps:
             for app in self.meta.apps:
                 if app.configured:
-                    path = os.path.join(app.download_path,const.DEPLOYMENT_DIR)
-                    path = os.path.join(path,const.SETTINGS_FILE_NAME)
-                    self.write_app_settings(app,path)
+                    base_path = os.path.join(app.download_path,const.DEPLOYMENT_DIR)
+                    settings_path = os.path.join(base_path,const.SETTINGS_FILE_NAME)
+                    self.write_app_settings(app,settings_path)
+                    prefix = app.name
+                    version = str(const.VERSION)
+                    commit = utils.get_commit(app.meta_url)
+                    self.build_bundle(app,base_path,prefix,version,commit)
 
     def do_build(self,arg):
         'Build the installer'
@@ -506,6 +543,17 @@ class CcsBuildInstaller(cmd.Cmd):
             for app in self.meta.apps:
                 print('\t' + str(app.name))
         return False
+
+    def complete_configure(self,text,line,begidx,endidx):
+        rv = list()
+        if 0 == begidx and 0 == endidx:
+            for app in self.meta.apps:
+                rv.append(app.name)
+        else:
+            for app in self.meta.apps:
+                if app.name.startswith(line[begidx:endidx]):
+                    rv.append(app.name)
+        return rv
 
     def do_show(self,arg):
         'Show applications available for configuration'
@@ -643,6 +691,32 @@ class CcsBuildInstaller(cmd.Cmd):
                     else:
                         print('[write_app_settings] ??')
             fd.write('</' + TAG_CONFIG_ROOT + '>\n')
+
+    def build_bundle(self,app,base_path,prefix,version,commit):
+        print('Building install bundle for ' + app.name)
+        try:
+            # Copy over sensors...
+            print('Copying over modules...')
+            print('apps:')
+            for key in self.meta.apps:
+            #for key in self.ui.components.keys():
+            #    print(str(key))
+            #    for val in self.ui.components[key].keys():
+            #        print('\t' + str(val))
+
+            # Change working directory
+            cwd = os.getcwd()
+            os.chdir(base_path)
+            # Call the build script
+            if os.path.exists(const.BUILD_SCRIPT_NAME):
+                cmd = 'python ' + const.BUILD_SCRIPT_NAME + ' -p ' + str(prefix) + ' -v ' + str(version) +  ' -c ' + str(commit)
+                subprocess.run(cmd.split(' '))
+            else:
+                full_path = os.path.join(base_path,const.BUILD_SCRIPT_NAME)
+                print("[!] Error: Couldn't find script " + full_path)
+            os.chdir(cwd)
+        except Exception as ex:
+            print('[!] Error trying to build bundle: ' + str(ex))
 
     def get_loader_app(self,name):
         rv = None

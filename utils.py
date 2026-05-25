@@ -60,6 +60,39 @@ def is_zipfile(path:str) -> bool:
             rv = True
     return rv
 
+def get_commit(url):
+    rv = None
+    try:
+        r = requests.get(url)
+        if r.status_code < 400:
+            if r.headers['content-type'].startswith('text/html'):
+                x = r.content.decode('utf-8')
+                head = x.find(const.COMMIT_MARKER) + len(const.COMMIT_MARKER)
+                if head > 0:
+                    while x[head] in const.WHITESPACE:
+                        head += 1
+                    if x[head:].startswith(const.COMMIT_URL_MARKER):
+                        head += len(const.COMMIT_URL_MARKER)
+                        while False == x[head:].startswith('href'):
+                            head += 1
+                        head += len('href')
+                        while '"' != x[head]:
+                            head += 1
+                        head += 1
+                        tail = head
+                        while '"' != x[tail]:
+                            tail += 1
+                        url = x[head:tail]
+                        parts = url.split('/')
+                        rv = parts[len(parts)-1]
+                    else:
+                        print("[!] Couldn't find commit number in downloaded file:" + str(url))
+        else:
+            print('[!] Error (' + str(r.status_code) + ') retrieving commit meta file: ' + str(url))
+    except Exception as e:
+        print('[!] Error getting app commit number from ' + str(url) + ': ' + str(e))
+    return rv
+
 # Returns the path to the directory with the files (used to get directory without doing a download)
 def find_download_dir(start:str) -> str:
     rv = None

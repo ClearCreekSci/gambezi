@@ -14,6 +14,7 @@ TYPE_STRUCT        = 'struct'
 TYPE_LIST          = 'list'
 
 AFFIRMATIVE        = ['y','Y','yes','Yes','YES','t','true','True','TRUE']
+WHITESPACE         = [' ','\t','\r','\n']
 
 DOCS_DIR           = 'docs'
 UI_FILE            = 'ui.xml'
@@ -51,3 +52,9 @@ GITHUB_MAIN_SUFFIX = '-main'
 DEPLOY_DIR         = 'deployment'
 
 ID_SEP             = '/'
+TYPE_SEP           = ':'
+
+BUILD_SCRIPT_NAME  = 'build_bundle.py'
+VERSION            = 1
+COMMIT_MARKER      = 'data-hovercard-type="commit"'
+COMMIT_URL_MARKER  = 'data-hovercard-url'
