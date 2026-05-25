@@ -5,8 +5,8 @@
     </paths>
     <apps>
 	<app name="logger">
-		<!-- <url>https://github.com/ClearCreekSci/ccs_data_logger/archive/refs/heads/main.zip</url> -->
-		<url>https://github.com/ClearCreekSci/ccs_data_logger/archive/refs/tags/v1-test-not-for-release.zip</url>
+		<url>https://github.com/ClearCreekSci/ccs_data_logger/archive/refs/heads/main.zip</url>
+		<!-- <url>https://github.com/ClearCreekSci/ccs_data_logger/archive/refs/tags/v1-test-not-for-release.zip</url> -->
 		<meta-url>https://github.com/ClearCreekSci/ccs_data_logger/releases/tag/v1-test-not-for-release</meta-url>
 
 	    <desc>Collect and store data from sensors</desc>

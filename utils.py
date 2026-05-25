@@ -208,6 +208,14 @@ def get_simple_name(s):
         rv = parts[1]
     return rv
 
+def get_namespace(s):
+    rv = s
+    parts = s.split(':')
+    if len(parts) == 2:
+        rv = parts[0]
+    return rv
+
+
 def should_quit(msg):
     print('')
     x = input(msg)

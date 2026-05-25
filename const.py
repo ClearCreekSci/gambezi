@@ -31,7 +31,7 @@ TAG_NAME           = 'name'
 TAG_NAMESPACE      = 'ns'
 TAG_OBJECT         = 'object'
 TAG_STRUCT         = 'struct'
-TAG_SUBTYPE        = 'subtype'
+TAG_ITEMTYPE       = 'itemtype'
 TAG_SUPER          = 'super'
 TAG_TYPE           = 'type'
 TAG_TYPES          = 'types'
@@ -47,9 +47,11 @@ DOWNLOAD_SKIPPED   = 0
 DOWNLOAD_COMPLETED = 1
 
 SHELL_SUFFIX       = '.sh'
+PYTHON_SUFFIX      = '.py'
 ZIP_SUFFIX         = '.zip'
 GITHUB_MAIN_SUFFIX = '-main'
 DEPLOY_DIR         = 'deployment'
+MOD_SUFFIX         = 'mods'
 
 ID_SEP             = '/'
 TYPE_SEP           = ':'

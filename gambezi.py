@@ -96,15 +96,15 @@ def configure_base_object(obj):
             default = ''
             if obj.name in obj.defaults:
                 default = obj.defaults[obj.name]
-            if const.TAG_VALUE in obj.values.keys():
-                default = obj.values[const.TAG_VALUE]
+            if const.TAG_VALUE in obj.value.keys():
+                default = obj.value[const.TAG_VALUE]
             print('Enter value for ' + obj.name + ' (' + str(default) + '): ')
             x = input()
             # If they just hit enter, keep and print the current value
             if len(x) == 0:
                 x = default
                 print(str(default))
-            obj.values[const.TAG_VALUE] = x
+            obj.value[const.TAG_VALUE] = x
             done = True
     except Exception as e:
         s = 'Value entry error (' + obj.name + '): ' + str(e) + '\n'
@@ -120,15 +120,15 @@ def configure_member(obj,mtype,key):
             default = ''
             if key in obj.defaults:
                 default = obj.defaults[key]
-            if (key in obj.values):
-                default = obj.values[key]
+            if (key in obj.value):
+                default = obj.value[key]
             print('Enter value for ' + mtype.name + ' (' + str(default) + '): ')
             x = input()
             # If they just hit enter, keep and print the current value
             if len(x) == 0:
                 x = default
                 print(str(default))
-            obj.values[key] = x
+            obj.value[key] = x
             done = True
     except Exception as e:
         s = 'Value entry error (' + mtype.name + '): ' + str(e) + '\n'
@@ -153,7 +153,7 @@ def configure_struct(ui,obj,otype):
                 new_object.defaults[defkey] = obj.defaults[defkey]
             stype = ui.find_type(mtype.type)
             configure_struct(ui,new_object,stype)
-            obj.values[key] = new_object 
+            obj.value[key] = new_object 
 
 class CcsListConfigurator(cmd.Cmd):
     prompt = '> '
@@ -184,15 +184,15 @@ class CcsListConfigurator(cmd.Cmd):
         if arg == 'types':
             print('Available types:')
             atypes = self.get_available_types()
+            print('[do_show] atypes: ' + str(atypes))
             for atype in atypes:
-                comp = self.ui.find_component_by_type(atype.name)
-                print(comp.name)
+                print(atype.name)
         elif arg == 'values':
             print('Configured values:')
-            for key in self.obj.values.keys():
-                if const.TAG_SUBTYPE == key:
+            for key in self.obj.value.keys():
+                if const.TAG_ITEMTYPE == key:
                     continue
-                v = self.obj.values[key]
+                v = self.obj.value[key]
                 print(key + ':\n')
                 print(v)
         else:
@@ -205,36 +205,32 @@ class CcsListConfigurator(cmd.Cmd):
         found = False
         atypes = self.get_available_types()
         for atype in atypes:
-            comp = self.ui.find_comp_by_type(atype.name)
-            if None is not comp:
-                if arg == comp.name:
-                    if isinstance(atype,ui_config.UiStruct):
-                        name_ok = False
-                        while False == name_ok:
-                            name_found = False
-                            mid = input('Please enter an ID for ' + arg + ': ')
-                            full_name = arg + const.ID_SEP + mid
-                            for key in self.obj.values.keys():
-                                if full_name == key:
-                                    name_found = True
-                                    break
-                            if name_found:
-                                print('\t[*] ID "' + mid + '" is in use, IDs must be unique')
-                            else:
-                                name_ok = True
-                        obj = obj.clone()
-                        configure_struct(self.ui,obj,atype)
-                        self.obj.values[full_name] = obj
-                        found = True
-                    else:
-                        print('Trying to add invalid type (' + str(type(atype)) + ') to the application')
+            if arg == atype.name:
+                if isinstance(atype,ui_config.UiStruct):
+                    name_ok = False
+                    while False == name_ok:
+                        name_found = False
+                        mid = input('Please enter an ID for ' + arg + ': ')
+                        full_name = arg + const.ID_SEP + mid
+                        for key in self.obj.value.keys():
+                            if full_name == key:
+                                name_found = True
+                                break
+                        if name_found:
+                            print('\t[*] ID "' + mid + '" is in use, IDs must be unique')
+                        else:
+                            name_ok = True
+                    obj = ui_config.create_object_from_type(atype,utils.get_namespace(atype.name))
+                    configure_struct(self.ui,obj,atype)
+                    self.obj.value[full_name] = obj
+                    found = True
+                else:
+                    print('Trying to add invalid type (' + str(type(atype)) + ') to the application')
         if False == found:
             print('Unknown type: ' + arg)
             print('The following types are available:')
             for x in atypes:
-                obj = self.ui.find_object_by_type(x.name)
-                if None is not obj:
-                    print(obj.name)
+                print(x.name)
         return False
 
     def complete_add(self,text,line,begidx,endidx):
@@ -256,26 +252,26 @@ class CcsListConfigurator(cmd.Cmd):
         fullname = None
         if 0 == len(arg):
             print('Please specify the id of the component to remove (one of the following):')
-            for key in self.obj.values.keys():
+            for key in self.obj.value.keys():
                 if const.ID_SEP in key:
                     parts = key.split(const.ID_SEP)
                     if len(parts) == 2:
                         print('\t' + parts[1])
         else:
             x = None
-            for key in self.obj.values.keys():
+            for key in self.obj.value.keys():
                 if const.ID_SEP in key:
                     parts = key.split(const.ID_SEP)
                     if len(parts) == 2:
                         if parts[1] == arg:
-                            x = self.obj.values[key]
+                            x = self.obj.value[key]
                             fullname = key
                             break
             if None is not x:
                 x = input('Remove component with ID: ' + str(arg) + '? (y/n) ')
                 if x in const.AFFIRMATIVE:
                     if None is not fullname:
-                        self.obj.values.pop(fullname)
+                        self.obj.value.pop(fullname)
             else:
                 print("Couldn't find component with ID: " + '"' + str(arg) + '"')
         return False
@@ -284,13 +280,13 @@ class CcsListConfigurator(cmd.Cmd):
         rv = list()
         atypes = self.get_available_types()
         if 0 == begidx and 0 == endidx:
-            for key in self.obj.values.keys():
+            for key in self.obj.value.keys():
                 if const.ID_SEP in key:
                     parts = key.split(const.ID_SEP)
                     if len(parts) == 2:
                         rv.append(parts[1])
         else:
-            for key in self.obj.values.keys():
+            for key in self.obj.value.keys():
                 if const.ID_SEP in key:
                     parts = key.split(const.ID_SEP)
                     if len(parts) == 2:
@@ -306,9 +302,9 @@ class CcsListConfigurator(cmd.Cmd):
 
     def get_available_types(self):
         atypes = list()
-        if const.TAG_SUBTYPE in self.obj.values.keys():
-            subtype = self.obj.values[const.TAG_SUBTYPE]
-            otype = self.ui.find_type(subtype)
+        if const.TAG_ITEMTYPE in self.obj.value.keys():
+            itemtype = self.obj.value[const.TAG_ITEMTYPE]
+            otype = self.ui.find_type(itemtype)
             if None is not otype:
                 if False == otype.abstract:
                     atypes.append(otype)
@@ -431,14 +427,14 @@ class CcsAppConfigurator(cmd.Cmd):
         for obj_key in self.ui.components[self.name].keys():
             obj = self.ui.components[self.name][obj_key]
 
-            if 0 == len(obj.values):
+            if 0 == len(obj.value):
                 if obj.type in const.BASE_TYPES:
                     # There should be only one value. If not, we'll get the last one...
                     for key in obj.defaults.keys():
-                        obj.values[const.TAG_VALUE] = obj.defaults[key]
+                        obj.value[const.TAG_VALUE] = obj.defaults[key]
                 else:
                     for def_key in obj.defaults.keys():
-                        obj.values[def_key] = obj.defaults[def_key]
+                        obj.value[def_key] = obj.defaults[def_key]
 
         self.parent.set_ui(self.ui)
         for x in self.meta.apps:
@@ -471,12 +467,12 @@ class CcsBuildInstaller(cmd.Cmd):
             if hasattr(comp,'configured') and comp.configured:
                 for obj_key in self.ui.components[comp_key].keys():
                     obj = self.ui.components[comp_key][obj_key]
-                    v = obj.values
-                    if 0 == len(obj.values):
+                    v = obj.value
+                    if 0 == len(obj.value):
                         print("Can't build. Empty value found for " + str(obj.name))
                         rv = False
-                    # if it has a 'subtype' tag, treat it as a list
-                    elif const.TAG_SUBTYPE in v.keys():
+                    # if it has a 'itemtype' tag, treat it as a list
+                    elif const.TAG_ITEMTYPE in v.keys():
                         # if the list doesn't have anything else in it 
                         if 1 == len(v.keys()):
                             print("Can't build. Empty list found for " + str(obj.name))
@@ -616,35 +612,35 @@ class CcsBuildInstaller(cmd.Cmd):
         print('[write_settings_member] THIS IS NOT IMPLEMENTED YET!')
 
     def write_settings_list(self,obj,fd):
-        if None is not obj.values:
-            if False == const.TAG_SUBTYPE in obj.values.keys():
+        if None is not obj.value:
+            if False == const.TAG_ITEMTYPE in obj.value.keys():
                 # FIXME: throw an exception?
                 return
             name = obj.name
-            subname = obj.values[const.TAG_SUBTYPE]
-            subtype = self.ui.find_type(subname)
+            itemname = obj.value[const.TAG_ITEMTYPE]
+            itemtype = self.ui.find_type(itemname)
             fd.write('<' + name + '>\n')
-            for key in obj.values.keys():
-                if key == const.TAG_SUBTYPE:
+            for key in obj.value.keys():
+                if key == const.TAG_ITEMTYPE:
                     continue
-                subobj = obj.values[key]
-                if subobj.type in const.BASE_TYPES:
-                    self.write_settings_base_object(subobj,fd)
+                itemobj = obj.value[key]
+                if itemobj.type in const.BASE_TYPES:
+                    self.write_settings_base_object(itemobj,fd)
                 else:
-                    if isinstance(subtype,ui_config.UiMember):
-                        self.write_settings_member(subobj,fd)
-                    elif isinstance(subtype,ui_config.UiStruct):
-                        self.write_settings_struct(subobj,fd,subtype.name)
-                    elif isinstance(subtype,ui_config.UiList):
-                        self.write_settings_list(subobj,fd)
+                    if isinstance(itemtype,ui_config.UiMember):
+                        self.write_settings_member(itemobj,fd)
+                    elif isinstance(itemtype,ui_config.UiStruct):
+                        self.write_settings_struct(itemobj,fd,itemtype.name)
+                    elif isinstance(itemtype,ui_config.UiList):
+                        self.write_settings_list(itemobj,fd)
                     else:
                         print('[write_settings_list] ??')
             fd.write('</' + name + '>\n')
 
     # The 'name' parameter needs a little explanation. It is currently only
     # used when calling write_settings_struct from write_settings_list. By
-    # setting 'name' to the list's subtype name, each object in the list
-    # will get a surrounding tag with the subtype name.
+    # setting 'name' to the list's itemtype name, each object in the list
+    # will get a surrounding tag with the itemtype name.
     def write_settings_struct(self,obj,fd,name=None):
         write_extra_name = False
         if None is name:
@@ -658,8 +654,8 @@ class CcsBuildInstaller(cmd.Cmd):
             fd.write('<name>')
             fd.write(obj.name)
             fd.write('</name>\n')
-        for key in obj.values.keys():
-            member = obj.values[key]
+        for key in obj.value.keys():
+            member = obj.value[key]
             if isinstance(member,ui_config.UiObject):
                 self.write_settings_struct(member,fd)
             else:
@@ -670,7 +666,7 @@ class CcsBuildInstaller(cmd.Cmd):
 
     def write_settings_base_object(self,obj,fd):
         fd.write('<' + obj.name + '>')
-        fd.write(str(obj.values['value']))
+        fd.write(str(obj.value['value']))
         fd.write('</' + obj.name + '>')
 
     def write_app_settings(self,app,path):
@@ -695,14 +691,16 @@ class CcsBuildInstaller(cmd.Cmd):
     def build_bundle(self,app,base_path,prefix,version,commit):
         print('Building install bundle for ' + app.name)
         try:
-            # Copy over sensors...
+            # Find the meta modules that have the app name as the loader
+            # Copy them to the "<prefix>mod" directory
             print('Copying over modules...')
-            print('apps:')
-            for key in self.meta.apps:
-            #for key in self.ui.components.keys():
-            #    print(str(key))
-            #    for val in self.ui.components[key].keys():
-            #        print('\t' + str(val))
+            for mod in self.meta.modules:
+                if app.name == mod.loader:
+                    dst_dir = mod.prefix + const.MOD_SUFFIX
+                    dst_path = os.path.join(app.download_path,dst_dir)
+                    src_path = os.path.join(mod.download_path,mod.name + const.PYTHON_SUFFIX)
+                    print(src_path + ' --> ' + dst_path)
+                    shutil.copy(src_path,dst_path)
 
             # Change working directory
             cwd = os.getcwd()

@@ -24,6 +24,15 @@ import xml.etree.ElementTree as et
 import const
 import utils
 
+
+def create_object_from_type(otype,name):
+    rv = UiObject() 
+    rv.type = otype.name
+    rv.name = name
+    for key in otype.defaults.keys():
+        rv.defaults[key] = otype.defaults[key]
+    return rv
+
 class UiMember(object):
 
     def __init__(self):
@@ -74,6 +83,11 @@ class UiStruct(UiType):
         self.type = const.TYPE_STRUCT 
         self.super_types = list()
         self.abstract = False
+        # For a struct type, the defaults dictionary contains values
+        # for each of the members in the struct. The key is the
+        # member name, the value is the member value 
+        self.defaults = dict()
+
 
     def clone(self):
         rv = UiStruct()
@@ -84,6 +98,8 @@ class UiStruct(UiType):
             rv.members[key] = self.members[key].clone()
         for st in self.super_types:
             rv.super_types.append(st)
+        for key in self.defaults.keys():
+            rv.defaults[key] = self.defaults[key]
         return rv
 
     def __repr__(self):
@@ -104,39 +120,39 @@ class UiList(UiType):
        
     def __init__(self):
         super().__init__()
-        self.subtype = None 
+        self.itemtype = None 
         self.type = const.TYPE_LIST 
 
     def clone(self):
         rv = UiList()
         rv.name = self.name
         rv.desc = self.desc
-        rv.subtype = self.subtype
+        rv.itemtype = self.itemtype
         return rv
 
     def __repr__(self):
         s = super().__repr__()
-        if hasattr(self,const.TAG_SUBTYPE) and None is not self.subtype:
-            s += '\tsubtype: ' + str(self.subtype) + '\n'
+        if hasattr(self,const.TAG_ITEMTYPE) and None is not self.itemtype:
+            s += '\titemtype: ' + str(self.itemtype) + '\n'
         return s
 
 class UiObject(object):
     def __init__(self):
         self.type = None
         self.name = None
-        # For basic types, the first value in the values dictionary
+        # For basic types, the first value in the value dictionary
         # contains the value of the object. The key is 'value'
 
-        # For a struct, the values dictionary contains the values of the 
-        # members
+        # For a struct, the value dictionary contains the values of the 
+        # members, using the name in the type and the associated value in the value
 
-        # For a list, the values dictionary contains an item with the
-        # key 'subtype' and the value being the name of the type.  
-        # Note that objects in the list may be subtypes of the 'subtype'.
+        # For a list, the value dictionary contains an item with the
+        # key 'itemtype' and the value being the name of the type.  
+        # Note that objects in the list may be subtypes of the 'itemtype'.
         # Subsequent values in the list have a type name and identifier
         # string separated by a forward slash ('/') as the key, with the value
         # being a UiObject containing the actual data for the named object.
-        self.values = dict()
+        self.value = dict()
 
         # For basic types, the defaults dictionary
         # contains the value of the object. The key is 'value'
@@ -155,8 +171,8 @@ class UiObject(object):
         rv = UiObject()
         rv.type = self.type
         rv.name = self.name
-        for key in self.values.keys():
-            rv.values[key] = self.values[key]
+        for key in self.value.keys():
+            rv.value[key] = self.value[key]
         for key in self.defaults.keys():
             rv.defaults[key] = self.defaults[key]
         return rv
@@ -171,12 +187,12 @@ class UiObject(object):
             s += '\tname: ' + str(self.name) + '\n'
         else:
             s += '\tname: unknown' + '\n'
-        if None is not self.values:
-            s += '\tvalues:\n'
-            for key in self.values.keys():
-                s += '\t\t' + str(key) + ': ' + str(self.values[key]) + '\n'
+        if None is not self.value:
+            s += '\tvalue:\n'
+            for key in self.value.keys():
+                s += '\t\t' + str(key) + ': ' + str(self.value[key]) + '\n'
         else:
-            s += '\tvalues: unknown' + '\n'
+            s += '\tvalue: unknown' + '\n'
         #if None is not self.defaults:
         #    s += '\tdefaults:\n'
         #    for key in self.defaults.keys():
@@ -225,7 +241,7 @@ class UiConfig(object):
                     t = self.find_type(obj.type)
                     if None is not t:
                         if const.TYPE_LIST == t.type:
-                            obj.values[const.TAG_SUBTYPE] = t.subtype
+                            obj.value[const.TAG_ITEMTYPE] = t.itemtype
                     self.components[name][obj.name] = obj
             else:
                 raise utils.InvalidCcsUiFile('ui element not found')
@@ -264,6 +280,11 @@ class UiConfig(object):
             if None is not super_types:
                 for nd in super_types:
                     new_struct.super_types.append(nd.text.strip())
+        defaults_node = node.find(const.TAG_DEFAULTS)
+        if None is not defaults_node:
+            for def_node in defaults_node:
+                key = def_node.tag
+                new_struct.defaults[key] = def_node.text.strip()
         # FIXME: Do error checking, including name collisions
         self.types[new_struct.name] = new_struct
 
@@ -319,9 +340,9 @@ class UiConfig(object):
         desc_node = node.find(const.TAG_DESC)
         if None is not desc_node:
             new_list.desc = desc_node.text.strip()
-        subtype_node = node.find(const.TAG_SUBTYPE)
-        if None is not subtype_node:
-            new_list.subtype = subtype_node.text.strip()
+        itemtype_node = node.find(const.TAG_ITEMTYPE)
+        if None is not itemtype_node:
+            new_list.itemtype = itemtype_node.text.strip()
         # FIXME: Do error checking, including name collisions
         self.types[new_list.name] = new_list
 
@@ -383,19 +404,6 @@ class UiConfig(object):
                         if obj_key == obj_name:
                             rv = self.components[comp_key][obj_key]
                             break
-        return rv
-
-    def find_object_by_type(self,name):
-        rv = None
-        if None is not self.components:
-            for comp_key in self.components.keys():
-                for obj_key in self.components[comp_key].keys():
-                    print('Object key: ' + str(obj_key))
-                    obj = self.components[comp_key][obj_key]
-                    if obj.type == name:
-                        rv = obj
-                        #break
-                        print('Found object: ' + str(name))
         return rv
 
     def __repr__(self):
