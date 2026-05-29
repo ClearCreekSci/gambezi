@@ -753,6 +753,8 @@ if '__main__' == __name__:
         build_installer.parse_local_ui()
         # build_installer.do_help('')
         build_installer.cmdloop()
+    except KeyboardInterrupt:
+        print('\nbye...')
     except Exception as e:
         print(traceback.format_exc())
         print('Exception: ' + str(type(e)))
