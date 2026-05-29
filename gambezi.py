@@ -171,6 +171,12 @@ class CcsListConfigurator(cmd.Cmd):
         self.prompt = list_name + '> '
         self.obj = self.ui.find_object_by_name(app.name,list_name)
 
+    # We don't want to repeat a command if the user just hits enter...
+    def precmd(self,line):
+        if (line is None) or (0 == len(line)):
+            return 'help'
+        return line
+
     def do_cancel(self,arg):
         'Cancel list configuration and return to application configuration'
         print('Return to app configuration without saving list? (y/n)')
@@ -339,6 +345,12 @@ class CcsAppConfigurator(cmd.Cmd):
             self.download_app_modules(app,download_status)
         self.fixup_deployment(app)
 
+    # We don't want to repeat a command if the user just hits enter...
+    def precmd(self,line):
+        if (line is None) or (0 == len(line)):
+            return 'help'
+        return line
+
     def fixup_deployment(self,app):
         deploy_dir = os.path.join(app.download_path,const.DEPLOY_DIR)
         for f in os.listdir(deploy_dir):
@@ -457,6 +469,12 @@ class CcsBuildInstaller(cmd.Cmd):
         super().__init__()
         self.meta = None
         self.ui = ui_config.UiConfig()
+
+    # We don't want to repeat a command if the user just hits enter...
+    def precmd(self,line):
+        if (line is None) or (0 == len(line)):
+            return 'help'
+        return line
 
     # Returns True if everything is OK
     # Returns False if there is a problem
