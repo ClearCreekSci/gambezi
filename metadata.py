@@ -25,6 +25,7 @@ import xml.etree.ElementTree as et
 import utils
 import ui_config
 
+ATTRIB_DST      = 'dst'
 ATTRIB_NAME     = 'name'
 
 TAG_APP         = 'app'
@@ -41,6 +42,13 @@ TAG_STAGING     = 'staging'
 TAG_SUBS        = 'subs'
 TAG_UICONFIG    = 'ui-config'
 TAG_URL         = 'url'
+
+class SubModule(object):
+
+   def __init__(self):
+       self.name = None
+       self.url = None
+       self.dst = None
 
 class MetaBase(object):
 
@@ -59,7 +67,7 @@ class MetaApp(MetaBase):
     def __init__(self):
         super().__init__()
         self.loader = 'self'
-        self.subs = dict()
+        self.subs = list()
         self.configured = False
 
     def __repr__(self):
@@ -125,12 +133,15 @@ class GambeziMeta(object):
                 subs_node = app_node.find(TAG_SUBS)
                 if None is not subs_node:
                     for url_node in subs_node:
-                        key = None
+                        new_sub = SubModule()
                         if ATTRIB_NAME in url_node.attrib:
-                            key = url_node.attrib[ATTRIB_NAME]
+                            new_sub.name = url_node.attrib[ATTRIB_NAME].strip()
                         else:
                             raise utils.InvalidGambeziMetaEntry('Submodule URL is missing name value')
-                        app.subs[key] = url_node.text.strip()
+                        if ATTRIB_DST in url_node.attrib:
+                            new_sub.dst = url_node.attrib[ATTRIB_DST].strip()
+                        new_sub.url = url_node.text.strip()
+                        app.subs.append(new_sub)
                 self.apps.append(app)
             modules_node = root.find(TAG_MODULES)
             for module_node in modules_node.findall(TAG_MODULE):

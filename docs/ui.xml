@@ -14,6 +14,11 @@
            <name>paths</name>
 	   <desc>Important file paths</desc>
 	   <member>
+               <name>base</name>
+	       <type>string</type>
+	       <desc>Location on disk of application files</desc>
+           </member>
+	   <member>
                <name>log</name>
 	       <type>string</type>
 	       <desc>Location on disk of log files</desc>

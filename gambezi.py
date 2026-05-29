@@ -21,6 +21,7 @@
 
 import os
 import cmd
+import random
 import sys
 import shutil
 import stat
@@ -41,13 +42,14 @@ banner = '''
         \\/     \\/      \\/    \\/     \\/      \\/   
 '''
 
-intro = '''
-Gambezi is a command-line python program used to create installation bundles
-for Clear Creek Scientific applications. It is not as easy to use as programs
-with a graphical user interface, but it runs everywhere python does without
-needing to install any additional libraries. To learn how to use Gambezi, type
-"help" (without the quotes) at anytime to see the available commands.
-'''
+intros = list()
+intros.append('Proceed. Not sure how?\nThe answer lies in the keys\nEnter help and read')
+intros.append('Named after a fish\nThe interface is clunky\nStill, very useful')
+intros.append('Only needs Python\nNothing else to install\nConfigure with joy')
+intros.append('Greeted with sadness\nWhy is it not on the web?\nIt gets the job done')
+intros.append('Command line Python?\nWhere is the WYSIWYG?\nOld school rules apply')
+intros.append('Green phosphor on black\nLate nights alone at the screen\nCode must be completed')
+intros.append('Cursor is blinking\nThe prompt awaits your command\nTry entering "help"')
 
 DEFAULT_META_PATH = './meta.xml'
 
@@ -88,9 +90,6 @@ def parse_ui(metabase,ui,comp):
 
 def configure_base_object(obj):
     done = False
-
-    print('[configure_base_object] obj: ' + str(obj))
-
     try:
         while False == done:
             default = ''
@@ -147,10 +146,11 @@ def configure_struct(ui,obj,otype):
             new_object = ui_config.UiObject() 
             new_object.name = key 
             new_object.type = otype.name
-            # Copy all the defaults to each object because we don't know which
+            # Copy the unknown defaults to each object because we don't know which
             # ones different members will require...
             for defkey in obj.defaults.keys():
-                new_object.defaults[defkey] = obj.defaults[defkey]
+                if False == (defkey in new_object.defaults.keys()):
+                    new_object.defaults[defkey] = obj.defaults[defkey]
             stype = ui.find_type(mtype.type)
             configure_struct(ui,new_object,stype)
             obj.value[key] = new_object 
@@ -356,9 +356,8 @@ class CcsAppConfigurator(cmd.Cmd):
 
     def download_subs(self,app):
         dst = os.path.expanduser(os.path.join(self.meta.staging,app.name))
-        for key in app.subs.keys():
-            url = app.subs[key]
-            downloaded = utils.download_file(url,dst,True)
+        for sub in app.subs:
+            downloaded = utils.download_file(sub.url,dst,True)
             basename = os.path.basename(downloaded)
             if basename.endswith(const.ZIP_SUFFIX):
                 basename = basename[0:-len(const.ZIP_SUFFIX)]
@@ -368,7 +367,10 @@ class CcsAppConfigurator(cmd.Cmd):
                 for f in os.listdir(downloaded):
                     if f != '.' and f != '..':
                         src_path = os.path.join(downloaded,f)
-                        dst_path = os.path.join(app.download_path,basename)
+                        dst_path = app.download_path
+                        if None is not sub.dst:
+                            dst_path = os.path.join(dst_path,sub.dst)
+                        dst_path = os.path.join(dst_path,basename)
                         dst_path = os.path.join(dst_path,f)
                         shutil.copy(src_path,dst_path)
 
@@ -492,13 +494,13 @@ class CcsBuildInstaller(cmd.Cmd):
                     self.build_bundle(app,base_path,prefix,version,commit)
 
     def do_build(self,arg):
-        'Build the installer'
+        'Build one or more installer scripts. This command should be run after the "configure" command'
         if True == self.check_build():
             self.build_it()
         return False 
 
     def do_reset(self,arg):
-        'Reset the configuration context (clear cache etc.)'
+        'Reset the configuration context (clear cache etc.). This command will delete current configurations'
         if True == os.path.exists(self.meta.staging):
             print('Deleting cache directory: ' + self.meta.staging)
             shutil.rmtree(self.meta.staging)
@@ -517,7 +519,7 @@ class CcsBuildInstaller(cmd.Cmd):
         self.ui.parse_types(dst)
 
     def do_configure(self,arg):
-        'Configure an application in the installation: i.e. configure logger'
+        'Configure an application for installation: i.e. configure logger. Afterwards, run the "build" command to create the installer script'
         found = False
         for app in self.meta.apps:
             if app.name == arg:
@@ -564,29 +566,8 @@ class CcsBuildInstaller(cmd.Cmd):
                     print(s)
         return False 
 
-    def do_tutorial(self,arg):
-        'Displays a short tutorial on how to use gambezi'
-        print("\nThe 'show' command will show the apps that can be configured")
-        print("For example:")
-        print('build_installer> show')
-        print('Apps')
-        print('----')
-        print('\tlogger (Collect and store data from sensors)')
-        print('\tserver (Display collected data in a web browser)')
-        if utils.should_quit("[press 'q' to quit, any other key to continue]"):
-            return False
-        print("\nThe 'configure' command requires the name of one of the apps")
-        print("displayed by the 'show' command. Typing 'configure' followed")
-        print("by an app name will start the configuration process for that")
-        print("app. For example:")
-        print('build_installer> configure logger')
-        print('logger>')
-        #if utils.should_quit("[press 'q' to quit, any other key to continue]"):
-        #    return False
-        return False
-  
     def do_quit(self,arg):
-        'Quit the program'
+        'Quit the program. If the build command is not run before quitting, configurations will not be saved.'
         return True
 
     def parse_metadata(self,path):
@@ -667,7 +648,7 @@ class CcsBuildInstaller(cmd.Cmd):
     def write_settings_base_object(self,obj,fd):
         fd.write('<' + obj.name + '>')
         fd.write(str(obj.value['value']))
-        fd.write('</' + obj.name + '>')
+        fd.write('</' + obj.name + '>\n')
 
     def write_app_settings(self,app,path):
         print('Writing settings.cfg for ' + str(app.name) + ' (' + path + ')')
@@ -693,7 +674,7 @@ class CcsBuildInstaller(cmd.Cmd):
         try:
             # Find the meta modules that have the app name as the loader
             # Copy them to the "<prefix>mod" directory
-            print('Copying over modules...')
+            print('Copying modules...')
             for mod in self.meta.modules:
                 if app.name == mod.loader:
                     dst_dir = mod.prefix + const.MOD_SUFFIX
@@ -709,6 +690,15 @@ class CcsBuildInstaller(cmd.Cmd):
             if os.path.exists(const.BUILD_SCRIPT_NAME):
                 cmd = 'python ' + const.BUILD_SCRIPT_NAME + ' -p ' + str(prefix) + ' -v ' + str(version) +  ' -c ' + str(commit)
                 subprocess.run(cmd.split(' '))
+                script_src_path = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE).stdout.read()
+                script_src_path = script_src_path.decode('utf-8')
+                if (None is not script_src_path) and (len(script_src_path) > 0):
+                    basename = os.path.basename(script_src_path)
+                    script_dst_path = os.path.join(cwd,basename) 
+                    shutil.copy(script_src_path,script_dst_path)
+                    print('\n')
+                else:
+                    print('[!] Bundle builder failed to return a path')
             else:
                 full_path = os.path.join(base_path,const.BUILD_SCRIPT_NAME)
                 print("[!] Error: Couldn't find script " + full_path)
@@ -730,9 +720,15 @@ class CcsBuildInstaller(cmd.Cmd):
     def set_ui(self,ui):
         self.ui = ui
 
+def print_intro():
+    print('\n')
+    print(intros[random.randint(0,len(intros)-1)])
+    print('\n')
+
+
 if '__main__' == __name__:
     print(banner)
-    print(intro)
+    print_intro()
     try:
         build_installer = CcsBuildInstaller()
         build_installer.parse_metadata(DEFAULT_META_PATH)

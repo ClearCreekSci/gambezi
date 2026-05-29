@@ -1,6 +1,5 @@
 <gambezi>
-    <paths>
-	<!-- <staging>./staging</staging> but we will have to fix the path separator /mnt/c/Users/winsl/tmp/ccs_foo//docs/ui.xml-->
+    <paths> <!-- <staging>./staging</staging> but we will have to fix the path separator /mnt/c/Users/winsl/tmp/ccs_foo//docs/ui.xml-->
         <staging>/tmp/ccs_staging/</staging>
     </paths>
     <apps>
@@ -18,6 +17,10 @@
         <app name="server">
             <url>https://github.com/ClearCreekSci/ccs_dl_browser/archive/refs/heads/main.zip</url>
             <desc>Display collected data in a web browser</desc> 
+	    <subs>
+                <url name="ccs_dl_config">https://github.com/ClearCreekSci/ccs_dlconfig/archive/refs/heads/main.zip</url>
+		<url name="ccs_base" dst="databrowser">https://github.com/ClearCreekSci/ccs_base/archive/refs/heads/main.zip</url>
+	    </subs>
         </app>
     </apps>
     <modules>
