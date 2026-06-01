@@ -1,6 +1,6 @@
 <gambezi>
-    <paths> <!-- <staging>./staging</staging> but we will have to fix the path separator /mnt/c/Users/winsl/tmp/ccs_foo//docs/ui.xml-->
-        <staging>/tmp/ccs_staging/</staging>
+    <paths>
+        <staging>tmp</staging>
     </paths>
     <apps>
 	<app name="logger">

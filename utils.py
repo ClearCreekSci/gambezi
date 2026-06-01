@@ -93,8 +93,8 @@ def get_commit(url):
         print('[!] Error getting app commit number from ' + str(url) + ': ' + str(e))
     return rv
 
-# Returns the path to the directory with the files (used to get directory without doing a download)
-def find_download_dir(start:str) -> str:
+# Returns the path to the directory with the "docs" dir 
+def find_download_dir(start:str,depth:int) -> str:
     rv = None
     if os.path.isdir(start):
         files = os.listdir(start)
@@ -102,8 +102,11 @@ def find_download_dir(start:str) -> str:
             rv = start 
         else:
             for f in files:
-                if os.path.isdir(os.path.join(start,f)):
-                    rv = find_download_dir(os.path.join(start,f))
+                check_path = os.path.join(start,f)
+                if os.path.isdir(check_path):
+                    rv = find_download_dir(check_path,depth+1)
+                    if None is not rv:
+                        break
     return rv
 
 # Returns the path to the directory with the files
@@ -172,6 +175,11 @@ def download_file(src:str,dst:str,verbose:bool=False) -> int:
         return download_local_file(src[len(LOCAL_FILE_PREFIX):],dst,verbose)
 
 def download_component(stage,comp):
+
+    if None is comp:
+        print('[download_component: comp is NULL!')
+        return const.DOWNLOAD_FAILED 
+    print('[download_component] stage: ' + str(stage) + ', comp: ' + str(comp.name))
     rv = const.DOWNLOAD_COMPLETED
     # Look for base path
     dst = os.path.expanduser(os.path.join(stage,comp.name))
@@ -191,7 +199,8 @@ def download_component(stage,comp):
                 print('Error removing cache directory (' + dst + '): ' + str(e))
             rv = const.DOWNLOAD_FAILED
     else:
-        comp.download_path = find_download_dir(dst)
+        print('[download_component] comp: ' + str(comp.name))
+        comp.download_path = find_download_dir(dst,0)
         print('Skipping download, using cached files in ' + str(comp.download_path))
         rv = const.DOWNLOAD_SKIPPED
     return rv

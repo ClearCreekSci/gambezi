@@ -362,8 +362,12 @@ class CcsAppConfigurator(cmd.Cmd):
         dst = os.path.expanduser(os.path.join(self.meta.staging,app.name))
         for x in self.meta.modules:
             if x.loader == app.name:
-                if const.DOWNLOAD_COMPLETED:
+                if const.DOWNLOAD_COMPLETED == download_status:
                     utils.download_component(self.meta.staging,x)
+                elif const.DOWNLOAD_SKIPPED == download_status:
+                    if None is x.download_path:
+                        check_path = os.path.expanduser(os.path.join(self.meta.staging,x.name))
+                        x.download_path = utils.find_download_dir(check_path,download_status)
                 parse_ui(self.meta,self.ui,x)
 
     def download_subs(self,app):
