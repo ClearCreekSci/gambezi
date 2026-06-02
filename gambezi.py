@@ -190,7 +190,6 @@ class CcsListConfigurator(cmd.Cmd):
         if arg == 'types':
             print('Available types:')
             atypes = self.get_available_types()
-            print('[do_show] atypes: ' + str(atypes))
             for atype in atypes:
                 print(atype.name)
         elif arg == 'values':
@@ -462,9 +461,39 @@ class CcsAppConfigurator(cmd.Cmd):
 
     def do_show(self,arg):
         'Show application objects that need configuring'
-        for key in self.ui.components[self.name]:
-            print(str(key))
-            #print(str(self.ui.components[self.name][key]))
+        if (arg is None) or (0 == len(arg)):
+            for key in self.ui.components[self.name]:
+                print(str(key))
+        else:
+            found = False
+            for key in self.ui.components[self.name].keys():
+                if str(key) == str(arg): 
+                    found = True
+                    obj = self.ui.components[self.name][key]
+                    otype = self.ui.find_type(obj.type)
+                    if None is not otype:
+                        if hasattr(otype,'members'):
+                            for key in otype.members.keys():
+                                m = otype.members[key]
+                                if hasattr(m,'desc') and (len(m.desc) > 0):
+                                    print('\t' + str(m.name) + ': ' + str(m.desc))
+                                else:
+                                    print('\t' + str(m.name))
+                        else:
+                            # Probably a list
+                            if isinstance(otype,ui_config.UiList):
+                                if hasattr(otype,'desc'):
+                                    print('\t' + str(otype.name) + ': ' + str(otype.desc))
+                                else:
+                                    print('\t' + str(otype.name) + ' (list)')
+                            else:
+                                print('Uknown type for ' + str(key))
+                    else:
+                        # Must be a built-in type
+                        print('\t' + str(obj.name) + ': (' + str(obj.type) + ')')
+
+            if False == found:
+                print('Unknown member: ' + str(key))
 
 class CcsBuildInstaller(cmd.Cmd):
     prompt = 'build installer> '

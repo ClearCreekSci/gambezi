@@ -1,13 +1,14 @@
 
 
 # Basic Types 
+TYPE_BOOLEAN       = 'boolean'
 TYPE_BYTE          = 'byte'
 TYPE_CHAR          = 'char'
 TYPE_INT           = 'int'
 TYPE_FLOAT         = 'float'
 TYPE_STRING        = 'string'
 
-BASE_TYPES         = [TYPE_BYTE,TYPE_CHAR,TYPE_INT,TYPE_FLOAT,TYPE_STRING]
+BASE_TYPES         = [TYPE_BOOLEAN,TYPE_BYTE,TYPE_CHAR,TYPE_INT,TYPE_FLOAT,TYPE_STRING]
 
 # Complex Types 
 TYPE_STRUCT        = 'struct'

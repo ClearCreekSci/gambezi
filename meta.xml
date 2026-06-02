@@ -15,7 +15,7 @@
 	    </subs>
         </app>
         <app name="server">
-            <url>https://github.com/ClearCreekSci/ccs_dl_browser/archive/refs/heads/main.zip</url>
+            <url>https://github.com/ClearCreekSci/ccs_dl_server/archive/refs/heads/main.zip</url>
             <desc>Display collected data in a web browser</desc> 
 	    <subs>
                 <url name="ccs_dl_config">https://github.com/ClearCreekSci/ccs_dlconfig/archive/refs/heads/main.zip</url>
