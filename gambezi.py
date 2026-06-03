@@ -29,9 +29,15 @@ import subprocess
 import traceback
 
 import const
-import metadata
-import ui_config
-import utils
+HAVE_REQUESTS = True
+# Many systems don't include requests by default. Handle the lack of requests gracefully
+try:
+    import metadata
+    import ui_config
+    import utils
+except ModuleNotFoundError as e:
+    if 'requests' in str(e):
+        HAVE_REQUESTS = False
 
 banner = '''
   ________              ___.                 .__ 
@@ -145,7 +151,7 @@ def configure_struct(ui,obj,otype):
         else:
             new_object = ui_config.UiObject() 
             new_object.name = key 
-            new_object.type = otype.name
+            new_object.type = mtype.name
             # Copy the unknown defaults to each object because we don't know which
             # ones different members will require...
             for defkey in obj.defaults.keys():
@@ -205,6 +211,18 @@ class CcsListConfigurator(cmd.Cmd):
             print('The available options are "types" or "values"')
         return False
 
+    def complete_show(self,text,line,begidx,endidx):
+        rv = list()
+        if 0 == begidx and 0 == endidx:
+            rv.append('types')
+            rv.append('values')
+        else:
+            for x in ['types','values']:
+                if x.startswith(line[begidx:endidx]):
+                    rv.append(x)
+        return rv
+
+
     def do_add(self,arg):
         'Add a component to the list: i.e. add bme280'
         found = False
@@ -247,9 +265,7 @@ class CcsListConfigurator(cmd.Cmd):
         else:
             for atype in atypes:
                 if atype.name.startswith(line[begidx:endidx]):
-                    parts = atype.name.split(const.TYPE_SEP)
-                    if len(parts) == 2:
-                        rv.append(parts[0])
+                    rv.append(atype.name)
         return rv
 
     def do_remove(self,arg):
@@ -437,6 +453,17 @@ class CcsAppConfigurator(cmd.Cmd):
                     print(key) 
         return False
 
+    def complete_set(self,text,line,begidx,endidx):
+        rv = list()
+        if 0 == begidx and 0 == endidx:
+            for key in self.ui.components[self.name].keys():
+                rv.append(key)
+        else:
+            for key in self.ui.components[self.name].keys():
+                if key.startswith(line[begidx:endidx]):
+                    rv.append(key)
+        return rv
+
 
     def do_save(self,arg):
         'Save the current app configuration and return to install builder.'
@@ -475,10 +502,15 @@ class CcsAppConfigurator(cmd.Cmd):
                         if hasattr(otype,'members'):
                             for key in otype.members.keys():
                                 m = otype.members[key]
+                                desc = ''
                                 if hasattr(m,'desc') and (len(m.desc) > 0):
-                                    print('\t' + str(m.name) + ': ' + str(m.desc))
+                                    desc = str(m.desc)
+                                if key in obj.value.keys():
+                                    print('\t' + str(m.name) + ' (' + str(obj.value[key]) + '): ' + desc)
+                                elif key in obj.defaults.keys():
+                                    print('\t' + str(m.name) + ' (' + str(obj.defaults[key]) + '): ' + desc)
                                 else:
-                                    print('\t' + str(m.name))
+                                    print('\t' + str(m.name) + ':' + desc)
                         else:
                             # Probably a list
                             if isinstance(otype,ui_config.UiList):
@@ -494,6 +526,17 @@ class CcsAppConfigurator(cmd.Cmd):
 
             if False == found:
                 print('Unknown member: ' + str(key))
+
+    def complete_show(self,text,line,begidx,endidx):
+        rv = list()
+        if 0 == begidx and 0 == endidx:
+            for key in self.ui.components[self.name].keys():
+                rv.append(key)
+        else:
+            for key in self.ui.components[self.name].keys():
+                if key.startswith(line[begidx:endidx]):
+                    rv.append(key)
+        return rv
 
 class CcsBuildInstaller(cmd.Cmd):
     prompt = 'build installer> '
@@ -778,6 +821,12 @@ def print_intro():
 
 
 if '__main__' == __name__:
+    if False == HAVE_REQUESTS:
+        print('\n!!!!! !!!!! !!!!!')
+        print('The requests module was not found.')
+        print('    Gambezi requires the requests module to download necessary files.\n')
+        print('--> Please install the requests module by running the command: "pip install requests"\n')
+        exit()
     print(banner)
     print_intro()
     try:
