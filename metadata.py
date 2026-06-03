@@ -69,6 +69,7 @@ class MetaApp(MetaBase):
         self.loader = 'self'
         self.subs = list()
         self.configured = False
+        self.built = False
 
     def __repr__(self):
         s = 'MetaApp\n'

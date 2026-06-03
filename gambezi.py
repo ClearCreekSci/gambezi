@@ -625,6 +625,7 @@ class CcsBuildInstaller(cmd.Cmd):
                     if False == (arg in self.ui.components.keys()):
                         parse_ui(self.meta,self.ui,app)
                     self.configure_app(app,status)
+                    app.built = False
                 else:
                     print('[!] Error downloading ' + str(app.name))
                 break
@@ -663,6 +664,14 @@ class CcsBuildInstaller(cmd.Cmd):
 
     def do_quit(self,arg):
         'Quit the program. If the build command is not run before quitting, configurations will not be saved.'
+        for app in self.meta.apps:
+            if (True == app.configured) and (False == app.built):
+                print('The "' + app.name + '" installer has been configured but not built.')
+                x = input('Are you sure you want to exit? (y/n) ')
+                if x in const.AFFIRMATIVE:
+                    return True
+                else:
+                    return False
         return True
 
     def parse_metadata(self,path):
@@ -792,6 +801,7 @@ class CcsBuildInstaller(cmd.Cmd):
                     script_dst_path = os.path.join(cwd,basename) 
                     shutil.copy(script_src_path,script_dst_path)
                     print('\n')
+                    app.built = True
                 else:
                     print('[!] Bundle builder failed to return a path')
             else:
