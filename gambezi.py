@@ -613,7 +613,7 @@ class CcsBuildInstaller(cmd.Cmd):
         self.ui.parse_types(dst)
 
     def do_configure(self,arg):
-        'Configure an application for installation: i.e. configure logger. Afterwards, run the "build" command to create the installer script'
+        'Configure an application for installation: i.e. configure logger.'
         found = False
         for app in self.meta.apps:
             if app.name == arg:
@@ -622,7 +622,8 @@ class CcsBuildInstaller(cmd.Cmd):
                 if status == const.DOWNLOAD_SKIPPED:
                     print('\tIf desired, use the "reset" command to delete cache and force download')
                 if status > const.DOWNLOAD_FAILED:
-                    parse_ui(self.meta,self.ui,app)
+                    if False == (arg in self.ui.components.keys()):
+                        parse_ui(self.meta,self.ui,app)
                     self.configure_app(app,status)
                 else:
                     print('[!] Error downloading ' + str(app.name))
