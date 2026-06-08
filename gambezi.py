@@ -233,7 +233,7 @@ class CcsListConfigurator(cmd.Cmd):
                     name_ok = False
                     while False == name_ok:
                         name_found = False
-                        mid = input('Please enter an identifying nickname for ' + arg + ': ')
+                        mid = input('Please enter an nickname for this instance of ' + arg + ': ')
                         full_name = arg + const.ID_SEP + mid
                         for key in self.obj.value.keys():
                             if full_name == key:
@@ -800,6 +800,7 @@ class CcsBuildInstaller(cmd.Cmd):
                     basename = os.path.basename(script_src_path)
                     script_dst_path = os.path.join(cwd,basename) 
                     shutil.copy(script_src_path,script_dst_path)
+                    print('\n\nInstallation script written to ' + script_dst_path)
                     print('\n')
                     app.built = True
                 else:
