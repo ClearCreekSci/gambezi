@@ -184,7 +184,7 @@ class CcsListConfigurator(cmd.Cmd):
         return line
 
     def do_cancel(self,arg):
-        'Cancel list configuration and return to application configuration'
+        'Cancel list configuration and return to application configuration without saving'
         print('Return to app configuration without saving list? (y/n)')
         x = input()
         if x in const.AFFIRMATIVE:
@@ -193,6 +193,8 @@ class CcsListConfigurator(cmd.Cmd):
 
     def do_show(self,arg):
         'Show list item types [show types] or list item values [show values]'
+        print('Enter "show types" to see available list types')
+        print('Enter "show values" to see available list values')
         if arg == 'types':
             print('Available types:')
             atypes = self.get_available_types()
@@ -487,7 +489,8 @@ class CcsAppConfigurator(cmd.Cmd):
         return True
 
     def do_show(self,arg):
-        'Show application objects that need configuring'
+        'Show application objects that need configuring. Use "show" by itself to see object names. Use "show <object name>" to see specifics'
+        print('Objects to be configured using the "set" command:')
         if (arg is None) or (0 == len(arg)):
             for key in self.ui.components[self.name]:
                 print(str(key))
@@ -651,9 +654,8 @@ class CcsBuildInstaller(cmd.Cmd):
 
     def do_show(self,arg):
         'Show applications available for configuration'
+        print('Applications to be configured using the "configure" command:')
         if None is not self.meta:
-            print('Apps')
-            print('----')
             if None is not self.meta.apps:
                 for app in self.meta.apps:
                     s = '\t' + app.name
