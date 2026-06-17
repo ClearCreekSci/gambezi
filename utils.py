@@ -61,7 +61,7 @@ def is_zipfile(path:str) -> bool:
     return rv
 
 def get_commit(url):
-    rv = None
+    rv = 'Unknown'
     try:
         r = requests.get(url)
         if r.status_code < 400:
