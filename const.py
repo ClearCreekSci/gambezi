@@ -40,7 +40,6 @@ TAG_UI             = 'ui'
 TAG_VALUE          = 'value'
 
 XML_PREFIX         = '<?xml version="1.0" encoding="UTF-8"?>'
-DEPLOYMENT_DIR     = 'deployment'
 SETTINGS_FILE_NAME = 'settings.cfg'
 
 DOWNLOAD_FAILED    = -1

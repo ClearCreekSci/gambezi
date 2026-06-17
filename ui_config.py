@@ -68,7 +68,7 @@ class UiType(object):
         self.desc = None
 
     def __repr__(self):
-        s = ''
+        s = '=================\n'
         if hasattr(self,'name') and None is not self.name:
             s += '\tname: ' + str(self.name) + '\n'
         if hasattr(self,'desc') and None is not self.desc:

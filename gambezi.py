@@ -169,11 +169,13 @@ class CcsListConfigurator(cmd.Cmd):
         self.list_name = None
         self.ui = None
         self.obj = None
+        self.mod_list = list()
 
-    def setup(self,app,list_name):
+    def setup(self,app,list_name,mod_list):
         self.app = app
         self.ui = app.ui.clone()
         self.list_name = list_name
+        self.mod_list = mod_list
         self.prompt = list_name + '> '
         self.obj = self.ui.find_object_by_name(app.name,list_name)
 
@@ -193,9 +195,10 @@ class CcsListConfigurator(cmd.Cmd):
 
     def do_show(self,arg):
         'Show list item types [show types] or list item values [show values]'
-        print('Enter "show types" to see available list types')
-        print('Enter "show values" to see available list values')
-        if arg == 'types':
+        if (None is arg) or (len(arg) == 0):
+            print('Enter "show types" to see available list types')
+            print('Enter "show values" to see available list values')
+        elif arg == 'types':
             print('Available types:')
             atypes = self.get_available_types()
             for atype in atypes:
@@ -227,20 +230,39 @@ class CcsListConfigurator(cmd.Cmd):
 
     def do_add(self,arg):
         'Add a component to the list: i.e. add bme280'
+        if False == self.app.is_downloaded(arg):
+            self.app.download_app_module(arg)
         found = False
         atypes = self.get_available_types()
         for atype in atypes:
             if arg == atype.name:
+                found = True
+        if False == found:
+            for mod in self.app.meta.modules:
+                if mod.name == arg:
+                    parse_ui(self.app.meta,self.ui,mod)
+                    self.obj = self.ui.find_object_by_name(self.app.name,self.list_name)
+                    self.app.add_module(arg)
+                    break
+        atypes = self.get_available_types()
+        for atype in atypes:
+            if atype.name.startswith(arg):
                 if isinstance(atype,ui_config.UiStruct):
                     name_ok = False
                     while False == name_ok:
                         name_found = False
-                        mid = input('Please enter an nickname for this instance of ' + arg + ': ')
+                        mid = input('Please enter a nickname for this instance of ' + arg + ': ')
                         full_name = arg + const.ID_SEP + mid
                         for key in self.obj.value.keys():
-                            if full_name == key:
-                                name_found = True
-                                break
+                            parts = key.split(const.ID_SEP)
+                            if 2 == len(parts):
+                                if parts[1] == mid:
+                                    name_found = True
+                                    break
+                            else:
+                                if full_name == key:
+                                    name_found = True
+                                    break
                         if name_found:
                             print('\t[*] ID "' + mid + '" is in use, IDs must be unique')
                         else:
@@ -254,20 +276,19 @@ class CcsListConfigurator(cmd.Cmd):
         if False == found:
             print('Unknown type: ' + arg)
             print('The following types are available:')
-            for x in atypes:
-                print(x.name)
+            for mod in self.mod_list:
+                print(mod.name)
         return False
 
     def complete_add(self,text,line,begidx,endidx):
         rv = list()
-        atypes = self.get_available_types()
         if 0 == begidx and 0 == endidx:
-            for atype in atypes:
-                rv.append(atype.name)
+            for mod in self.mod_list:
+                rv.append(mod.name)
         else:
-            for atype in atypes:
-                if atype.name.startswith(line[begidx:endidx]):
-                    rv.append(atype.name)
+            for mod in self.mod_list:
+                if mod.name.startswith(line[begidx:endidx]):
+                    rv.append(mod.name)
         return rv
 
     def do_remove(self,arg):
@@ -295,6 +316,7 @@ class CcsListConfigurator(cmd.Cmd):
                 if x in const.AFFIRMATIVE:
                     if None is not fullname:
                         self.obj.value.pop(fullname)
+ 
             else:
                 print("Couldn't find component with ID: " + '"' + str(arg) + '"')
         return False
@@ -308,6 +330,7 @@ class CcsListConfigurator(cmd.Cmd):
                     parts = key.split(const.ID_SEP)
                     if len(parts) == 2:
                         rv.append(parts[1])
+                        #self.app.ui = self.ui
         else:
             for key in self.obj.value.keys():
                 if const.ID_SEP in key:
@@ -352,14 +375,13 @@ class CcsAppConfigurator(cmd.Cmd):
         self.parent = parent
         self.name = name
         self.prompt = name + '> '
+        self.download_status = download_status
         app = None
         for x in self.meta.apps:
             if x.name == name:
                 app = x
-        if (None is not app) and (download_status == const.DOWNLOAD_COMPLETED):
+        if (None is not app) and (self.download_status == const.DOWNLOAD_COMPLETED):
             self.download_subs(app)
-        if None is not app:
-            self.download_app_modules(app,download_status)
         self.fixup_deployment(app)
 
     # We don't want to repeat a command if the user just hits enter...
@@ -368,6 +390,9 @@ class CcsAppConfigurator(cmd.Cmd):
             return 'help'
         return line
 
+    def add_module(self,mod_name):
+        self.parent.add_module(self.name,mod_name)
+
     def fixup_deployment(self,app):
         deploy_dir = os.path.join(app.download_path,const.DEPLOY_DIR)
         for f in os.listdir(deploy_dir):
@@ -375,17 +400,27 @@ class CcsAppConfigurator(cmd.Cmd):
                 path = os.path.join(deploy_dir,f)
                 os.chmod(path,stat.S_IRWXU|stat.S_IRGRP|stat.S_IROTH)
 
-    def download_app_modules(self,app,download_status):
-        dst = os.path.expanduser(os.path.join(self.meta.staging,app.name))
+    def is_downloaded(self,mod):
+        rv = False
+        found = True
         for x in self.meta.modules:
-            if x.loader == app.name:
-                if const.DOWNLOAD_COMPLETED == download_status:
-                    utils.download_component(self.meta.staging,x)
-                elif const.DOWNLOAD_SKIPPED == download_status:
-                    if None is x.download_path:
-                        check_path = os.path.expanduser(os.path.join(self.meta.staging,x.name))
-                        x.download_path = utils.find_download_dir(check_path,download_status)
-                parse_ui(self.meta,self.ui,x)
+            ns = utils.get_namespace(mod)
+            if x.name == ns:
+                if None is x.download_path:
+                    check_path = os.path.expanduser(os.path.join(self.meta.staging,x.name))
+                    x.download_path = utils.find_download_dir(check_path,self.download_status)
+                if None is not x.download_path:
+                    rv = os.path.exists(x.download_path)
+                else:
+                    rv = False
+        return rv 
+
+    def download_app_module(self,mod_name):
+        dst = os.path.expanduser(os.path.join(self.meta.staging,self.name))
+        for mod in self.meta.modules:
+            if mod.name == mod_name:
+                utils.download_component(self.meta.staging,mod)
+                break
 
     def download_subs(self,app):
         dst = os.path.expanduser(os.path.join(self.meta.staging,app.name))
@@ -415,39 +450,46 @@ class CcsAppConfigurator(cmd.Cmd):
             return True
         return False
 
+    # Returns True if object is found and configured
+    def set_value(self,comp_key):
+        rv = False
+        print('----- Setting values for ' + str(comp_key) + ' -----')
+        obj = self.ui.components[self.name][comp_key]
+        if obj is not None:
+            if obj.type in const.BASE_TYPES:
+                configure_base_object(obj)
+            else:
+                otype = self.ui.find_type(obj.type)
+                if isinstance(otype,ui_config.UiStruct):
+                    configure_struct(self.ui,obj,otype)
+                elif isinstance(otype,ui_config.UiList):
+                    mod_list = list()
+                    for mod in self.meta.modules:
+                        full_name = utils.get_full_mod_name(mod)
+                        if otype.itemtype == full_name:
+                            mod_list.append(mod)
+                    list_config = CcsListConfigurator()
+                    list_config.setup(self,obj.name,mod_list)
+                    list_config.cmdloop()
+            rv = True
+        return rv
+
+
     def do_set(self,arg):
         'Set values for the currently selected application in the installation'
         arg = arg.strip()
         if None is arg or 0 == len(arg):
+            # If the user doesn't give us which object to set, we cycle through them all...
             if self.name in self.ui.components.keys():
                 for key in self.ui.components[self.name]:
-                    obj = self.ui.components[self.name][key]
-                    otype = self.ui.find_type(obj.type)
-                    if isinstance(otype,ui_config.UiStruct):
-                        configure_struct(self.ui,obj,otype)
-                    elif isinstance(otype,ui_config.UiList):
-                        list_config = CcsListConfigurator()
-                        list_config.setup(self,obj.name)
-                        list_config.cmdloop()
-                
+                    self.set_value(key)
             else:
                 print("[!] Couldn't find UI configuration for " + self.name)
         else:
             found = False
             for key in self.ui.components[self.name]:
                 if key == arg:
-                    obj = self.ui.components[self.name][key]
-                    if obj.type in const.BASE_TYPES:
-                        configure_base_object(obj)
-                    else:
-                        otype = self.ui.find_type(obj.type)
-                        if isinstance(otype,ui_config.UiStruct):
-                            configure_struct(self.ui,obj,otype)
-                        elif isinstance(otype,ui_config.UiList):
-                            list_config = CcsListConfigurator()
-                            list_config.setup(self,obj.name)
-                            list_config.cmdloop()
-                    found = True
+                    found = self.set_value(key)
             if False == found:
                 print('Unknown component (' + arg + ')')
                 print('The following components are available:')
@@ -471,6 +513,7 @@ class CcsAppConfigurator(cmd.Cmd):
         'Save the current app configuration and return to install builder.'
         print('Saving configuration and returning to install builder')
         for obj_key in self.ui.components[self.name].keys():
+
             obj = self.ui.components[self.name][obj_key]
 
             if 0 == len(obj.value):
@@ -490,11 +533,12 @@ class CcsAppConfigurator(cmd.Cmd):
 
     def do_show(self,arg):
         'Show application objects that need configuring. Use "show" by itself to see object names. Use "show <object name>" to see specifics'
-        print('Objects to be configured using the "set" command:')
         if (arg is None) or (0 == len(arg)):
+            print('Objects to be configured using the "set" command:')
             for key in self.ui.components[self.name]:
                 print(str(key))
         else:
+            print('Variables to be configured using the "set ' + arg + '" command:')
             found = False
             for key in self.ui.components[self.name].keys():
                 if str(key) == str(arg): 
@@ -582,7 +626,7 @@ class CcsBuildInstaller(cmd.Cmd):
         if None is not self.meta.apps:
             for app in self.meta.apps:
                 if app.configured:
-                    base_path = os.path.join(app.download_path,const.DEPLOYMENT_DIR)
+                    base_path = os.path.join(app.download_path,const.DEPLOY_DIR)
                     settings_path = os.path.join(base_path,const.SETTINGS_FILE_NAME)
                     self.write_app_settings(app,settings_path)
                     prefix = app.name
@@ -690,6 +734,11 @@ class CcsBuildInstaller(cmd.Cmd):
         except Exception as e:
             print('[!] Error parsing metadata: ' + str(e))
 
+    def add_module(self,app_name,mod_name):
+        for app in self.meta.apps:
+            if app_name == app.name:
+                app.add_module(mod_name)
+
     def configure_app(self,app,download_status):
         app_config = CcsAppConfigurator()
         app_config.setup(self,app.name,download_status)
@@ -701,12 +750,16 @@ class CcsBuildInstaller(cmd.Cmd):
     def write_settings_list(self,obj,fd):
         if None is not obj.value:
             if False == const.TAG_ITEMTYPE in obj.value.keys():
+                print('[write_settings_list] What happened?')
                 # FIXME: throw an exception?
                 return
             name = obj.name
             itemname = obj.value[const.TAG_ITEMTYPE]
             itemtype = self.ui.find_type(itemname)
             fd.write('<' + name + '>\n')
+
+            print('[write_settings_list] obj.value.keys: ' + str(obj.value.keys()))
+
             for key in obj.value.keys():
                 if key == const.TAG_ITEMTYPE:
                     continue
@@ -723,6 +776,8 @@ class CcsBuildInstaller(cmd.Cmd):
                     else:
                         print('[write_settings_list] ??')
             fd.write('</' + name + '>\n')
+        else:
+            print('[write_settings_list] obj value is null')
 
     # The 'name' parameter needs a little explanation. It is currently only
     # used when calling write_settings_struct from write_settings_list. By
@@ -782,7 +837,7 @@ class CcsBuildInstaller(cmd.Cmd):
             # Copy them to the "<prefix>mod" directory
             print('Copying modules...')
             for mod in self.meta.modules:
-                if app.name == mod.loader:
+                if mod.name in app.added_modules:
                     dst_dir = mod.prefix + const.MOD_SUFFIX
                     dst_path = os.path.join(app.download_path,dst_dir)
                     src_path = os.path.join(mod.download_path,mod.name + const.PYTHON_SUFFIX)

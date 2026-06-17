@@ -1,4 +1,8 @@
 <gambezi>
+    <meta>
+        <version>1</version>
+        <commit></commit>
+    </meta>
     <paths>
         <staging>tmp</staging>
     </paths>
@@ -32,6 +36,12 @@
 	    <!-- The "prefix" tag indicates the directory where the module will be stored in the final -->
 	    <!-- installation, with a 'mods' suffix (i.e. sensormods), as well as being the name -->
 	    <!-- of certain UI types (such as logger:sensor). Kind of confusing, but I think it will work -->
+	    <loader>logger</loader>
+	    <prefix>sensor</prefix>
+        </module>
+        <module name="pi_internals">
+            <url>https://github.com/ClearCreekSci/pi_internals_sensor/archive/refs/heads/main.zip</url>
+	    <desc>Measure Raspberry Pi CPU temperature, GPU temperature, and throttled status </desc>
 	    <loader>logger</loader>
 	    <prefix>sensor</prefix>
         </module>

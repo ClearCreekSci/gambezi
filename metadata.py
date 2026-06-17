@@ -70,6 +70,11 @@ class MetaApp(MetaBase):
         self.subs = list()
         self.configured = False
         self.built = False
+        self.added_modules = list()
+
+    def add_module(self,mod):
+        if False == (mod in self.added_modules):
+            self.added_modules.append(mod)
 
     def __repr__(self):
         s = 'MetaApp\n'
@@ -78,7 +83,7 @@ class MetaApp(MetaBase):
         s += 'desc: ' + str(self.desc) + '\n'
         s += 'cached: ' + str(self.cached) + '\n'
         s += 'download_path: ' + str(self.download_path) + '\n'
-        s += 'loader: ' + str(str(self.loader)) + '\n'
+        s += 'loader: ' + str(self.loader) + '\n'
         return s
 
 class MetaModule(MetaBase):

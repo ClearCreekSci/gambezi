@@ -210,16 +210,22 @@ def check_file_cache(v,dst):
 
 def get_simple_name(s):
     rv = s
-    parts = s.split(':')
+    parts = s.split(const.TYPE_SEP)
     if len(parts) == 2:
         rv = parts[1]
     return rv
 
 def get_namespace(s):
     rv = s
-    parts = s.split(':')
+    parts = s.split(const.TYPE_SEP)
     if len(parts) == 2:
         rv = parts[0]
+    return rv
+
+def get_full_mod_name(mod):
+    rv = ''
+    if None is not mod:
+        rv = mod.loader + const.TYPE_SEP + mod.prefix
     return rv
 
 
