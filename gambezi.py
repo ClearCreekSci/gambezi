@@ -200,9 +200,8 @@ class CcsListConfigurator(cmd.Cmd):
             print('Enter "show values" to see available list values')
         elif arg == 'types':
             print('Available types:')
-            atypes = self.get_available_types()
-            for atype in atypes:
-                print(atype.name)
+            for mod in self.app.meta.modules:
+                print(str(mod.name))
         elif arg == 'values':
             print('Configured values:')
             for key in self.obj.value.keys():
