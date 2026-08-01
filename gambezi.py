@@ -630,7 +630,7 @@ class CcsBuildInstaller(cmd.Cmd):
                     self.write_app_settings(app,settings_path)
                     prefix = app.name
                     version = str(const.VERSION)
-                    commit = utils.get_commit(app.meta_url)
+                    #commit = utils.get_commit(app.meta_url)
                     self.build_bundle(app,base_path,prefix,version,commit)
 
     def do_build(self,arg):

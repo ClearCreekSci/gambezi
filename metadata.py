@@ -37,7 +37,6 @@ TAG_MODULE      = 'module'
 TAG_MODULES     = 'modules'
 TAG_PATHS       = 'paths'
 TAG_PREFIX      = 'prefix'
-TAG_META_URL    = 'meta-url'
 TAG_STAGING     = 'staging'
 TAG_SUBS        = 'subs'
 TAG_UICONFIG    = 'ui-config'
@@ -55,7 +54,6 @@ class MetaBase(object):
     def __init__(self):
         self.name = None
         self.url = None
-        self.meta_url = None
         self.desc = None
         self.cached = False
         self.download_path = None
@@ -130,9 +128,6 @@ class GambeziMeta(object):
                 url_node = app_node.find(TAG_URL);
                 if None is not url_node:
                     app.url = url_node.text.strip()     
-                meta_url_node = app_node.find(TAG_META_URL);
-                if None is not meta_url_node:
-                    app.meta_url = meta_url_node.text.strip()
                 desc_node = app_node.find(TAG_DESC);
                 if None is not desc_node:
                     app.desc = desc_node.text.strip()     
