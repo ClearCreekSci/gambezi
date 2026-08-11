@@ -56,7 +56,7 @@ class MetaBase(object):
         self.url = None
         self.desc = None
         self.cached = False
-        self.download_path = None
+        self.download_info = utils.DownloadInfo()
         self.meta = None
         self.loader = None
 
@@ -79,8 +79,10 @@ class MetaApp(MetaBase):
         s += 'name: ' + str(self.name) + '\n'
         s += 'url: ' + str(self.url) + '\n'
         s += 'desc: ' + str(self.desc) + '\n'
-        s += 'cached: ' + str(self.cached) + '\n'
-        s += 'download_path: ' + str(self.download_path) + '\n'
+        s += 'cached: ' + str(self.download_info.cached) + '\n'
+        s += 'download_path: ' + str(self.download_info.download_path) + '\n'
+        s += 'download_status: ' + str(self.download_info.status) + '\n'
+        s += 'commit_string: ' + str(self.download_info.commit_string) + '\n'
         s += 'loader: ' + str(self.loader) + '\n'
         return s
 
@@ -95,8 +97,10 @@ class MetaModule(MetaBase):
         s += 'name: ' + str(self.name) + '\n'
         s += 'url: ' + str(self.url) + '\n'
         s += 'desc: ' + str(self.desc) + '\n'
-        s += 'cached: ' + str(self.cached) + '\n'
-        s += 'download_path: ' + str(self.download_path) + '\n'
+        s += 'cached: ' + str(self.download_info.cached) + '\n'
+        s += 'download_path: ' + str(self.download_info.download_path) + '\n'
+        s += 'download_status: ' + str(self.download_info.status) + '\n'
+        s += 'commit_string: ' + str(self.download_info.commit_string) + '\n'
         s += 'loader: ' + str(str(self.loader)) + '\n'
         s += 'prefix: ' + str(self.prefix) + '\n'
         return s

@@ -27,6 +27,9 @@ import shutil
 import stat
 import subprocess
 import traceback
+from ccs_dlconfig import manifest
+
+import datetime as dt
 
 import const
 HAVE_REQUESTS = True
@@ -62,6 +65,9 @@ DEFAULT_META_PATH = './meta.xml'
 TAG_CONFIG_ROOT   = 'ccs-config'
 ATTRIB_VERSION    = 'version='
 CONFIG_VERSION    = '"2"'
+UNKNOWN_COMMIT    = 'Unknown'
+MANIFEST_SUFFIX   = '-manifest.xml'
+MANIFESTS_SUBDIR  = 'manifests'
 
 def build_full_type(ui,otype):
     rv = None
@@ -88,7 +94,7 @@ def fixup_structs(ui):
     ui.types = full_types
 
 def parse_ui(metabase,ui,comp):
-    dst = os.path.join(comp.download_path,const.DOCS_DIR)
+    dst = os.path.join(comp.download_info.download_path,const.DOCS_DIR)
     dst = os.path.join(dst,const.UI_FILE)
     ui.parse_types(dst)
     ui.parse_ui(dst,comp.name)
@@ -171,13 +177,13 @@ class CcsListConfigurator(cmd.Cmd):
         self.obj = None
         self.mod_list = list()
 
-    def setup(self,app,list_name,mod_list):
-        self.app = app
-        self.ui = app.ui.clone()
+    def setup(self,app_config,list_name,mod_list):
+        self.app_config = app_config
+        self.ui = app_config.ui.clone()
         self.list_name = list_name
         self.mod_list = mod_list
         self.prompt = list_name + '> '
-        self.obj = self.ui.find_object_by_name(app.name,list_name)
+        self.obj = self.ui.find_object_by_name(app_config.name,list_name)
 
     # We don't want to repeat a command if the user just hits enter...
     def precmd(self,line):
@@ -200,8 +206,11 @@ class CcsListConfigurator(cmd.Cmd):
             print('Enter "show values" to see available list values')
         elif arg == 'types':
             print('Available types:')
-            for mod in self.app.meta.modules:
-                print(str(mod.name))
+            for mod in self.app_config.meta.modules:
+                s = str(mod.name)
+                if None is not mod.download_info and None is not mod.download_info.commit_string:
+                    s += ', commit: '  + mod.download_info.commit_string
+                print(s)
         elif arg == 'values':
             print('Configured values:')
             for key in self.obj.value.keys():
@@ -229,19 +238,36 @@ class CcsListConfigurator(cmd.Cmd):
 
     def do_add(self,arg):
         'Add a component to the list: i.e. add bme280'
-        if False == self.app.is_downloaded(arg):
-            self.app.download_app_module(arg)
+        if False == self.app_config.is_downloaded(arg):
+            try:
+                info = self.app_config.download_app_module(arg)
+                if info.status == const.DOWNLOAD_FAILED:
+                    print('[!] Error downloading app module ' + arg)
+                    return False
+            except Exception as e:
+                print('[!] Exception downloading app module ' + arg + ': ' + str(e))
+                return False
+        else:
+            info = self.app_config.get_download_info_from_name(arg)
+            if None is not info:
+                for mod in self.app_config.meta.modules:
+                    if mod.name == arg:
+                        mod.download_info.download_path = info.download_path
+                        mod.download_info.cached = info.cached
+                        mod.download_info.status = info.status
+                        mod.download_info.commit_string = info.commit_string
+            print('Skipping download, using cached files in ' + str(mod.download_info.download_path))
         found = False
         atypes = self.get_available_types()
         for atype in atypes:
             if arg == atype.name:
                 found = True
         if False == found:
-            for mod in self.app.meta.modules:
+            for mod in self.app_config.meta.modules:
                 if mod.name == arg:
-                    parse_ui(self.app.meta,self.ui,mod)
-                    self.obj = self.ui.find_object_by_name(self.app.name,self.list_name)
-                    self.app.add_module(arg)
+                    parse_ui(self.app_config.meta,self.ui,mod)
+                    self.obj = self.ui.find_object_by_name(self.app_config.name,self.list_name)
+                    self.app_config.add_module(arg)
                     break
         atypes = self.get_available_types()
         for atype in atypes:
@@ -342,7 +368,7 @@ class CcsListConfigurator(cmd.Cmd):
     def do_save(self,arg):
         'Save the current list and return to app configuration.'
         print('Saving list and returning to app configuration')
-        self.app.ui = self.ui
+        self.app_config.ui = self.ui
         return True
 
     def get_available_types(self):
@@ -368,18 +394,17 @@ class CcsAppConfigurator(cmd.Cmd):
         self.meta = None
         self.ui = None
 
-    def setup(self,parent,name,download_status):
+    def setup(self,parent,name):
         self.meta = parent.meta
         self.ui = parent.ui.clone()
         self.parent = parent
         self.name = name
         self.prompt = name + '> '
-        self.download_status = download_status
         app = None
         for x in self.meta.apps:
             if x.name == name:
                 app = x
-        if (None is not app) and (self.download_status == const.DOWNLOAD_COMPLETED):
+        if (None is not app) and (app.download_info.status == const.DOWNLOAD_COMPLETED):
             self.download_subs(app)
         self.fixup_deployment(app)
 
@@ -393,7 +418,7 @@ class CcsAppConfigurator(cmd.Cmd):
         self.parent.add_module(self.name,mod_name)
 
     def fixup_deployment(self,app):
-        deploy_dir = os.path.join(app.download_path,const.DEPLOY_DIR)
+        deploy_dir = os.path.join(app.download_info.download_path,const.DEPLOY_DIR)
         for f in os.listdir(deploy_dir):
             if f.endswith(const.SHELL_SUFFIX):
                 path = os.path.join(deploy_dir,f)
@@ -405,13 +430,34 @@ class CcsAppConfigurator(cmd.Cmd):
         for x in self.meta.modules:
             ns = utils.get_namespace(mod)
             if x.name == ns:
-                if None is x.download_path:
+                download_path = None
+                if None is x.download_info.download_path:
                     check_path = os.path.expanduser(os.path.join(self.meta.staging,x.name))
-                    x.download_path = utils.find_download_dir(check_path,self.download_status)
-                if None is not x.download_path:
-                    rv = os.path.exists(x.download_path)
+                    x.download_info.download_path = utils.find_download_dir(check_path,x.download_info.status)
+                if None is not x.download_info.download_path:
+                    rv = os.path.exists(x.download_info.download_path)
                 else:
                     rv = False
+                break
+        return rv 
+
+    # Returns download info if it exists, otherwise, returns None
+    def get_download_info_from_name(self,mod):
+        rv = None
+        for x in self.meta.modules:
+            ns = utils.get_namespace(mod)
+            if x.name == ns:
+                rv = utils.DownloadInfo()
+                if None is x.download_info.download_path:
+                    check_path = os.path.expanduser(os.path.join(self.meta.staging,x.name))
+                    rv.download_path = utils.find_download_dir(check_path,0)
+                else:
+                    rv.download_path = x.download_info.download_path
+                if None is not rv.download_path:
+                    rv.commit_string = utils.get_commit_string_from_download_path(rv.download_path)
+                rv.status = x.download_info.status
+                rv.cached = x.download_info.cached
+                break;
         return rv 
 
     def download_app_module(self,mod_name):
@@ -419,22 +465,25 @@ class CcsAppConfigurator(cmd.Cmd):
         for mod in self.meta.modules:
             if mod.name == mod_name:
                 utils.download_component(self.meta.staging,mod)
-                break
+                if mod.download_info.status == const.DOWNLOAD_FAILED:
+                    print('[!] Error downloading ' + str(mod_name))
+                return mod.download_info
+        return None
 
     def download_subs(self,app):
         dst = os.path.expanduser(os.path.join(self.meta.staging,app.name))
         for sub in app.subs:
-            downloaded = utils.download_file(sub.url,dst,True)
-            basename = os.path.basename(downloaded)
-            if basename.endswith(const.ZIP_SUFFIX):
-                basename = basename[0:-len(const.ZIP_SUFFIX)]
-            if basename.endswith(const.GITHUB_MAIN_SUFFIX):
-                basename = basename[0:-len(const.GITHUB_MAIN_SUFFIX)]
-            if None is not downloaded:
-                for f in os.listdir(downloaded):
+            download_info = utils.download_file(sub.url,dst,True)
+            if None is not download_info:
+                basename = os.path.basename(download_info.download_path)
+                if basename.endswith(const.ZIP_SUFFIX):
+                    basename = basename[0:-len(const.ZIP_SUFFIX)]
+                if basename.endswith(const.GITHUB_MAIN_SUFFIX):
+                    basename = basename[0:-len(const.GITHUB_MAIN_SUFFIX)]
+                for f in os.listdir(download_info.download_path):
                     if f != '.' and f != '..':
-                        src_path = os.path.join(downloaded,f)
-                        dst_path = app.download_path
+                        src_path = os.path.join(download_info.download_path,f)
+                        dst_path = app.download_info.download_path
                         if None is not sub.dst:
                             dst_path = os.path.join(dst_path,sub.dst)
                         dst_path = os.path.join(dst_path,basename)
@@ -625,12 +674,14 @@ class CcsBuildInstaller(cmd.Cmd):
         if None is not self.meta.apps:
             for app in self.meta.apps:
                 if app.configured:
-                    base_path = os.path.join(app.download_path,const.DEPLOY_DIR)
+                    base_path = os.path.join(app.download_info.download_path,const.DEPLOY_DIR)
                     settings_path = os.path.join(base_path,const.SETTINGS_FILE_NAME)
                     self.write_app_settings(app,settings_path)
                     prefix = app.name
                     version = str(const.VERSION)
-                    #commit = utils.get_commit(app.meta_url)
+                    commit = UNKNOWN_COMMIT
+                    if None is not app.download_info.commit_string:
+                        commit = app.download_info.commit_string
                     self.build_bundle(app,base_path,prefix,version,commit)
 
     def do_build(self,arg):
@@ -663,17 +714,21 @@ class CcsBuildInstaller(cmd.Cmd):
         found = False
         for app in self.meta.apps:
             if app.name == arg:
-                found = True
-                status = utils.download_component(self.meta.staging,app)
-                if status == const.DOWNLOAD_SKIPPED:
-                    print('\tIf desired, use the "reset" command to delete cache and force download')
-                if status > const.DOWNLOAD_FAILED:
-                    if False == (arg in self.ui.components.keys()):
-                        parse_ui(self.meta,self.ui,app)
-                    self.configure_app(app,status)
-                    app.built = False
-                else:
-                    print('[!] Error downloading ' + str(app.name))
+                try:
+                    found = True
+                    utils.download_component(self.meta.staging,app)
+                    if app.download_info.status == const.DOWNLOAD_SKIPPED:
+                        print('\tIf desired, use the "reset" command to delete cache and force download')
+                    if app.download_info.status > const.DOWNLOAD_FAILED:
+                        if False == (arg in self.ui.components.keys()):
+                            parse_ui(self.meta,self.ui,app)
+                        self.configure_app(app)
+                        app.built = False
+                    else:
+                        print('[!] Error downloading ' + str(app.name))
+                except Exception as e:
+                    print('[!] Exception downloading ' + str(app.name) + ': ' + str(e))
+                    print(traceback.format_exc())
                 break
         if False == found:
             print('Cannot configure unknown element: ' + str(arg))
@@ -696,16 +751,44 @@ class CcsBuildInstaller(cmd.Cmd):
         return rv
 
     def do_show(self,arg):
-        'Show applications available for configuration'
-        print('Applications to be configured using the "configure" command:')
-        if None is not self.meta:
-            if None is not self.meta.apps:
-                for app in self.meta.apps:
-                    s = '\t' + app.name
-                    if None is not app.desc:
-                        s += ' (' + app.desc + ')'
-                    print(s)
+        'Show applications available for configuration. Use "show" by itself to see object names. Use "show <application name>" to see specifics'
+        if (arg is None) or (0 == len(arg)):
+            print('Applications to be configured using the "configure" command:')
+            if None is not self.meta:
+                if None is not self.meta.apps:
+                    for app in self.meta.apps:
+                        s = '\t' + app.name
+                        if None is not app.desc:
+                            s += ' (' + app.desc  + ')'
+                        print(s)
+        else:
+            if None is not self.meta:
+                if None is not self.meta.apps:
+                    for app in self.meta.apps:
+                        if str(app.name) == str(arg):
+                            s = app.name + '\n'
+                            if None is not app.desc:
+                                s += '\tdescription: ' + app.desc + '\n'
+                            commit = UNKNOWN_COMMIT
+                            if None is not app.download_info.commit_string:
+                                commit = str(app.download_info.commit_string)
+                            s += '\tcommit: ' + commit + '\n'
+                            s += '\tcached: ' + str(app.download_info.cached)
+                            print(s)
+                            break
         return False 
+
+    def complete_show(self,text,line,begidx,endidx):
+        rv = list()
+        if 0 == begidx and 0 == endidx:
+            for key in self.meta.apps:
+                rv.append(key)
+        else:
+            for key in self.meta.apps:
+                if key.startswith(line[begidx:endidx]):
+                    rv.append(key)
+        return rv
+
 
     def do_quit(self,arg):
         'Quit the program. If the build command is not run before quitting, configurations will not be saved.'
@@ -738,9 +821,9 @@ class CcsBuildInstaller(cmd.Cmd):
             if app_name == app.name:
                 app.add_module(mod_name)
 
-    def configure_app(self,app,download_status):
+    def configure_app(self,app):
         app_config = CcsAppConfigurator()
-        app_config.setup(self,app.name,download_status)
+        app_config.setup(self,app.name)
         app_config.cmdloop()
 
     def write_settings_member(self,obj,fd):
@@ -832,16 +915,27 @@ class CcsBuildInstaller(cmd.Cmd):
     def build_bundle(self,app,base_path,prefix,version,commit):
         print('Building install bundle for ' + app.name)
         try:
-            # Find the meta modules that have the app name as the loader
+            # Find the meta modules that have the same app name as the loader
             # Copy them to the "<prefix>mod" directory
             print('Copying modules...')
             for mod in self.meta.modules:
                 if mod.name in app.added_modules:
                     dst_dir = mod.prefix + const.MOD_SUFFIX
-                    dst_path = os.path.join(app.download_path,dst_dir)
-                    src_path = os.path.join(mod.download_path,mod.name + const.PYTHON_SUFFIX)
+                    dst_path = os.path.join(app.download_info.download_path,dst_dir)
+                    src_path = os.path.join(mod.download_info.download_path,mod.name + const.PYTHON_SUFFIX)
                     print(src_path + ' --> ' + dst_path)
                     shutil.copy(src_path,dst_path)
+
+                    mf = manifest.Manifest()
+                    mf.name = mod.name
+                    mf.commit = mod.download_info.commit_string
+                    mf.version = const.UNSPECIFIED
+
+                    mf_path = os.path.join(dst_path,MANIFESTS_SUBDIR)
+                    if False == os.path.exists(mf_path):
+                        os.mkdir(mf_path,mode=0o755)
+                    mf_path = os.path.join(mf_path,mod.name + MANIFEST_SUFFIX)
+                    mf.write(mf_path)
 
             # Change working directory
             cwd = os.getcwd()
@@ -874,9 +968,13 @@ class CcsBuildInstaller(cmd.Cmd):
             if app.name == name:
                 rv = app
                 if False == app.cached:
-                    status = utils.download_component(self.meta.staging,app)
-                    if status == const.DOWNLOAD_FAILED:
-                        print('[!] Error downloading ' + str(app.name))
+                    try:
+                        status = utils.download_component(self.meta.staging,app)
+                        if status == const.DOWNLOAD_FAILED:
+                            print('[!] Error downloading ' + str(app.name))
+                    except Exception as e:
+                        print('[!] Exception downloading ' + str(app.name) + ': ' + str(e))
+                        print(traceback.format_exc())
         return rv
 
     def set_ui(self,ui):

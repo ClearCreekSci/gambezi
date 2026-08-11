@@ -1,6 +1,6 @@
 """
     utils.py  
-    Utility functions for Gambezi 
+    Utility classes and functions for Gambezi
 
     Copyright (C) 2026 Clear Creek Scientific
 
@@ -24,6 +24,7 @@ import requests
 import zipfile
 
 import const
+from ccs_dlconfig import ziputils
 
 HTTP_PREFIX       = 'http'
 LOCAL_FILE_PREFIX = 'file://'
@@ -52,6 +53,23 @@ class InvalidUiConfigElement(Exception):
 class InvalidCcsUiFile(Exception):
     pass
 
+class DownloadInfo:
+
+    def __init__(self):
+        self.download_path = None
+        self.commit_string = None
+        self.status = const.DOWNLOAD_UNKNOWN
+        self.cached = False
+
+    def __repr__(self):
+        rv = 'DownloadInfo:\n'
+        rv += '\tdownload_path: ' + str(self.download_path) + '\n'
+        rv += '\tcommit_string: ' + str(self.commit_string) + '\n'
+        rv += '\tstatus: ' + str(self.status) + '\n'
+        rv += '\tcached: ' + str(self.cached) + '\n'
+        return rv
+
+
 def is_zipfile(path:str) -> bool:
     rv = False
     with open(path,'rb') as fd:
@@ -76,9 +94,9 @@ def find_download_dir(start:str,depth:int) -> str:
                         break
     return rv
 
-# Returns the path to the directory with the files
+# Returns a DownloadInfo object
 def download_http(src:str,dst:str,verbose:bool=False) -> int:
-    rv = None
+    rv = DownloadInfo()
     try:
         r = requests.get(src)
         if r.status_code < 400:
@@ -103,14 +121,20 @@ def download_http(src:str,dst:str,verbose:bool=False) -> int:
                         if root.endswith('/'):
                             zf.extractall(dstdir)
                             root = root[:-1]
-                            rv = os.path.join(dstdir,root)
+                            rv.download_path = os.path.join(dstdir,root)
+                            if None is rv.download_path:
+                                rv.status = const.DOWNLOAD_FAILED
+                            else:
+                                rv.commit_string = get_commit_string_from_download_path(rv.download_path)
+                                rv.status = const.DOWNLOAD_COMPLETED
     except Exception as e:
+        rv.status = const.DOWNLOAD_FAILED
         print('Error retrieving file over HTTP: ' + str(e))
     return rv
 
-# Returns the path to the directory with the files
+# Returns a DownloadInfo object
 def download_local_file(src:str,dst:str,verbose:bool=False) -> int:
-    rv = None 
+    rv = DownloadInfo()
     buf = b''
     with open(src,'rb') as fd:
         buf = fd.read()
@@ -122,17 +146,24 @@ def download_local_file(src:str,dst:str,verbose:bool=False) -> int:
             bytes_written = fd.write(buf)
         if bytes_written == len(buf):
             if is_zipfile(dst):
-                print('Extracting: ' + str(dst))
                 with zipfile.ZipFile(dst) as zf:
                     info_list = zf.infolist()
                     root = info_list[0].filename
                     if root.endswith('/'):
                         zf.extractall(dstdir)
                         root = root[:-1]
-                        rv = os.path.join(dstdir,root)
+                        rv.download_path = os.path.join(dstdir,root)
+                        eocd = ccs_dlconfig.ziputils.ZipEocd()
+                        eocd.read(dst)
+                        rv.commit_string = eocd.comment
+                        rv.status = const.DOWNLOAD_COMPLETED
+        else:
+            rv.status = const.DOWNLOAD_FAILED
+    else:
+        rv.status = const.DOWNLOAD_FAILED
     return rv
 
-# Returns the path to the directory with the files
+# Returns a DownloadInfo object
 def download_file(src:str,dst:str,verbose:bool=False) -> int:
     if verbose:
         print('Downloading: ' + str(src) + ' to ' + str(dst))
@@ -145,35 +176,54 @@ def download_component(stage,comp):
 
     if None is comp:
         print('[download_component: comp is NULL!')
-        return const.DOWNLOAD_FAILED 
-    rv = const.DOWNLOAD_COMPLETED
+        comp.download_info.status = const.DOWNLOAD_FAILED
+        return None
     # Look for base path
     dst = os.path.expanduser(os.path.join(stage,comp.name))
     check_file_cache(comp,dst)
-    if False == comp.cached:
+    if False == comp.download_info.cached:
         # Create base path
         os.makedirs(dst,exist_ok=True)
         # Get real download path
-        downloaded = download_file(comp.url,dst,True)
-        if downloaded is not None:
-            comp.download_path = downloaded
-            comp.cached = True
+        download_info = download_file(comp.url,dst,True)
+        if download_info is not None:
+            comp.download_info = download_info
+            comp.download_info.status = const.DOWNLOAD_COMPLETED
         else:
             try:
                 os.rmdir(dst)
             except Exception as e:
                 print('Error removing cache directory (' + dst + '): ' + str(e))
-            rv = const.DOWNLOAD_FAILED
+            comp.download_info.status = const.DOWNLOAD_FAILED
     else:
-        comp.download_path = find_download_dir(dst,0)
-        print('Skipping download, using cached files in ' + str(comp.download_path))
-        rv = const.DOWNLOAD_SKIPPED
+        download_path = find_download_dir(dst,0)
+        if None is not download_path:
+            comp.download_info.download_path = download_path
+            comp.download_info.commit_string = get_commit_string_from_download_path(download_path)
+            print('Skipping download, using cached files in ' + str(comp.download_info.download_path))
+            comp.download_info.status = const.DOWNLOAD_SKIPPED
+        else:
+            comp.download_info.status = const.DOWNLOAD_FAILED
+
+def get_commit_string_from_download_path(download_path):
+    rv = None
+    if None is not download_path:
+        zip_path = download_path
+        if zip_path[-1] == os.path.sep:
+            zip_path = zip_path[:-1]
+        zip_path = zip_path + const.ZIP_SUFFIX
+        try:
+            eocd = ziputils.ZipEocd()
+            eocd.read(zip_path)
+            rv = eocd.comment
+        except Exception:
+            print('Error finding commit string in ' + str(zip_path))
     return rv
 
 def check_file_cache(v,dst):
     if False == v.cached:
         if os.path.exists(dst):
-            v.cached = True
+            v.download_info.cached = True
 
 def get_simple_name(s):
     rv = s
