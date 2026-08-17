@@ -583,8 +583,8 @@ class CcsAppConfigurator(cmd.Cmd):
         'Show application objects that need configuring. Use "show" by itself to see object names. Use "show <object name>" to see specifics'
         if (arg is None) or (0 == len(arg)):
             print('Objects to be configured using the "set" command:')
-            for key in self.ui.components[self.name]:
-                print(str(key))
+            for comp in self.ui.components[self.name]:
+                print(str(comp))
         else:
             print('Variables to be configured using the "set ' + arg + '" command:')
             found = False
@@ -757,7 +757,12 @@ class CcsBuildInstaller(cmd.Cmd):
             if None is not self.meta:
                 if None is not self.meta.apps:
                     for app in self.meta.apps:
-                        s = '\t' + app.name
+                        s = ''
+                        if hasattr(app,'configured') and app.configured:
+                            s += ' *configured*'
+                            s += '\t' + app.name
+                        else:
+                            s += '\t\t' + app.name
                         if None is not app.desc:
                             s += ' (' + app.desc  + ')'
                         print(s)

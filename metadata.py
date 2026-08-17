@@ -80,6 +80,8 @@ class MetaApp(MetaBase):
         s += 'url: ' + str(self.url) + '\n'
         s += 'desc: ' + str(self.desc) + '\n'
         s += 'cached: ' + str(self.download_info.cached) + '\n'
+        s += 'configured: ' + str(self.configured) + '\n'
+        s += 'built: ' + str(self.built) + '\n'
         s += 'download_path: ' + str(self.download_info.download_path) + '\n'
         s += 'download_status: ' + str(self.download_info.status) + '\n'
         s += 'commit_string: ' + str(self.download_info.commit_string) + '\n'
