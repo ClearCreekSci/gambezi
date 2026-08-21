@@ -751,7 +751,7 @@ class CcsBuildInstaller(cmd.Cmd):
         return rv
 
     def do_show(self,arg):
-        'Show applications available for configuration. Use "show" by itself to see object names. Use "show <application name>" to see specifics'
+        'Show applications available for configuration. Use "show" by itself to see application names. Use "show <application name>" to see specifics'
         if (arg is None) or (0 == len(arg)):
             print('Applications to be configured using the "configure" command:')
             if None is not self.meta:
