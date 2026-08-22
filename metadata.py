@@ -55,7 +55,6 @@ class MetaBase(object):
         self.name = None
         self.url = None
         self.desc = None
-        self.cached = False
         self.download_info = utils.DownloadInfo()
         self.meta = None
         self.loader = None

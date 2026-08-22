@@ -221,7 +221,7 @@ def get_commit_string_from_download_path(download_path):
     return rv
 
 def check_file_cache(v,dst):
-    if False == v.cached:
+    if False == v.download_info.cached:
         if os.path.exists(dst):
             v.download_info.cached = True
 

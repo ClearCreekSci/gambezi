@@ -698,10 +698,11 @@ class CcsBuildInstaller(cmd.Cmd):
             os.makedirs(self.meta.staging,exist_ok=True)
         print('Resetting cached values')
         for app in self.meta.apps:
-            app.cached = False
-            app.configured = False
+            app.download_info.cached = False
+            app.download_info.configured = False
+            app.download_info.status = const.DOWNLOAD_UNKNOWN
         for mod in self.meta.modules:
-            mod.cached = False
+            mod.download_info.cached = False
         return False
 
     def parse_local_ui(self):
@@ -718,7 +719,7 @@ class CcsBuildInstaller(cmd.Cmd):
                     found = True
                     utils.download_component(self.meta.staging,app)
                     if app.download_info.status == const.DOWNLOAD_SKIPPED:
-                        print('\tIf desired, use the "reset" command to delete cache and force download')
+                        print('\tIf desired, return to the build installer menu and use the "reset" command to delete cache and force download')
                     if app.download_info.status > const.DOWNLOAD_FAILED:
                         if False == (arg in self.ui.components.keys()):
                             parse_ui(self.meta,self.ui,app)
@@ -972,7 +973,7 @@ class CcsBuildInstaller(cmd.Cmd):
         for app in self.meta.apps:
             if app.name == name:
                 rv = app
-                if False == app.cached:
+                if False == app.download_info.cached:
                     try:
                         status = utils.download_component(self.meta.staging,app)
                         if status == const.DOWNLOAD_FAILED:
