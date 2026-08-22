@@ -651,11 +651,13 @@ class CcsBuildInstaller(cmd.Cmd):
     # Returns False if there is a problem
     def check_build(self):
         rv = True
+        found = False
         #print('[check_build] ui: ' + str(self.ui))
         for comp_key in self.ui.components.keys():
             #print('[check_build] comp_key: ' + str(comp_key))
             comp = self.ui.components[comp_key]
             if hasattr(comp,'configured') and comp.configured:
+                found = True
                 for obj_key in self.ui.components[comp_key].keys():
                     obj = self.ui.components[comp_key][obj_key]
                     v = obj.value
@@ -668,6 +670,9 @@ class CcsBuildInstaller(cmd.Cmd):
                         if 1 == len(v.keys()):
                             print("Can't build. Empty list found for " + str(obj.name))
                             rv = False
+        if False == found:
+            print('\nNo configured applications found. Please setup one or more applications using the "configure" command before trying to build an installer script.\n')
+            rv = False
         return rv
 
     def build_it(self):
@@ -685,13 +690,13 @@ class CcsBuildInstaller(cmd.Cmd):
                     self.build_bundle(app,base_path,prefix,version,commit)
 
     def do_build(self,arg):
-        'Build one or more installer scripts. This command should be run after the "configure" command'
+        'Build one or more installer scripts. This command should be run after the "configure" command.'
         if True == self.check_build():
             self.build_it()
         return False 
 
     def do_reset(self,arg):
-        'Reset the configuration context (clear cache etc.). This command will delete current configurations'
+        'Reset the configuration context (clear cache etc.). This command will delete current configurations and cause application components to be downloaded anew.'
         if True == os.path.exists(self.meta.staging):
             print('Deleting cache directory: ' + self.meta.staging)
             shutil.rmtree(self.meta.staging)
@@ -719,7 +724,7 @@ class CcsBuildInstaller(cmd.Cmd):
                     found = True
                     utils.download_component(self.meta.staging,app)
                     if app.download_info.status == const.DOWNLOAD_SKIPPED:
-                        print('\tIf desired, return to the build installer menu and use the "reset" command to delete cache and force download')
+                        print('\tIf desired, return to the build installer menu and use the "reset" command to delete cache and force download.')
                     if app.download_info.status > const.DOWNLOAD_FAILED:
                         if False == (arg in self.ui.components.keys()):
                             parse_ui(self.meta,self.ui,app)
@@ -732,7 +737,6 @@ class CcsBuildInstaller(cmd.Cmd):
                     print(traceback.format_exc())
                 break
         if False == found:
-            print('Cannot configure unknown element: ' + str(arg))
             print('The following are elements that may be configured:')
             print('Apps')
             print('----')
@@ -752,7 +756,7 @@ class CcsBuildInstaller(cmd.Cmd):
         return rv
 
     def do_show(self,arg):
-        'Show applications available for configuration. Use "show" by itself to see application names. Use "show <application name>" to see specifics'
+        'Show applications available for configuration. Use "show" by itself to see application names. Use "show <application name>" to see specifics.'
         if (arg is None) or (0 == len(arg)):
             print('Applications to be configured using the "configure" command:')
             if None is not self.meta:
