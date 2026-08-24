@@ -17,4 +17,6 @@ Use the "quit" command at the top-level to exit Gambezi. To return from a submen
 The "help" command can be used to discover which commands are available in a given menu. Typing "help" and hitting enter shows a list of available commands. Typing "help" followed by the name of one of the listed commands and then hitting enter displays information about that specific command.
 
 
+### Video Tutorial
 
+[Setting up a Clear Creek Scientific data logger](TODO: Put the link to the ccs data logger video here)
