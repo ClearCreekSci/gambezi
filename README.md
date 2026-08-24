@@ -2,7 +2,7 @@
 Python-based command-line program to configure Clear Creek Scientific data applications and create scripts to install them on the Raspberry Pi.
 
 ## Installing Python
-If you don't have Python installed on your computer, you can install it through your operating system's application store or package manager. You may also download it from [https://www.python.org](the official Python web site).
+If you don't have Python installed on your computer, you can install it through your operating system's application store or package manager. You may also download it from (https://www.python.org)[the official Python web site].
 
 ## Getting Started
 Click on the green "Code" button above, and select "Download ZIP" from the menu that is presented. After downloading the ZIP file, extract its contents to the desired location. Then open a command prompt, and navigate to the extracted location.
@@ -19,4 +19,4 @@ The "help" command can be used to discover which commands are available in a giv
 
 ### Video Tutorial
 
-[Setting up a Clear Creek Scientific data logger](TODO: Put the link to the ccs data logger video here)
+(Setting up a Clear Creek Scientific data logger)[TODO: Put the link to the ccs data logger video here]
