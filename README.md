@@ -19,4 +19,4 @@ The "help" command can be used to discover which commands are available in a giv
 
 ### Video Tutorials
 
-* [Setting up a Clear Creek Scientific data logger](TODO: Put the link to the ccs data logger video here)
+* [Setting up a Clear Creek Scientific data logger](https://www.youtube.com/watch?v=JenDNxWCETo)
