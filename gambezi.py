@@ -656,20 +656,21 @@ class CcsBuildInstaller(cmd.Cmd):
         for comp_key in self.ui.components.keys():
             #print('[check_build] comp_key: ' + str(comp_key))
             comp = self.ui.components[comp_key]
-            if hasattr(comp,'configured') and comp.configured:
-                found = True
-                for obj_key in self.ui.components[comp_key].keys():
-                    obj = self.ui.components[comp_key][obj_key]
-                    v = obj.value
-                    if 0 == len(obj.value):
-                        print("Can't build. Empty value found for " + str(obj.name))
-                        rv = False
-                    # if it has a 'itemtype' tag, treat it as a list
-                    elif const.TAG_ITEMTYPE in v.keys():
-                        # if the list doesn't have anything else in it 
-                        if 1 == len(v.keys()):
-                            print("Can't build. Empty list found for " + str(obj.name))
+            for app in self.meta.apps:
+                if comp_key == app.name and hasattr(app,'configured') and app.configured:
+                    found = True
+                    for obj_key in self.ui.components[comp_key].keys():
+                        obj = self.ui.components[comp_key][obj_key]
+                        v = obj.value
+                        if 0 == len(obj.value):
+                            print("Can't build. Empty value found for " + str(obj.name))
                             rv = False
+                        # if it has a 'itemtype' tag, treat it as a list
+                        elif const.TAG_ITEMTYPE in v.keys():
+                            # if the list doesn't have anything else in it 
+                            if 1 == len(v.keys()):
+                                print("Can't build. Empty list found for " + str(obj.name))
+                                rv = False
         if False == found:
             print('\nNo configured applications found. Please setup one or more applications using the "configure" command before trying to build an installer script.\n')
             rv = False
@@ -703,8 +704,8 @@ class CcsBuildInstaller(cmd.Cmd):
             os.makedirs(self.meta.staging,exist_ok=True)
         print('Resetting cached values')
         for app in self.meta.apps:
+            app.configured = False
             app.download_info.cached = False
-            app.download_info.configured = False
             app.download_info.status = const.DOWNLOAD_UNKNOWN
         for mod in self.meta.modules:
             mod.download_info.cached = False
